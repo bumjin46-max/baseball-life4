@@ -454,3 +454,8 @@ table.rec tr.farm td{color:var(--chalk-dim);font-style:italic}
   border-radius:999px;font-weight:700}
 .buildbar a{color:inherit;opacity:.7;text-decoration:underline}
 .buildbar a:hover{opacity:1}
+
+/* v3.3 — 도트 일러스트 시트
+   64×32 픽셀 격자가 아니라 잘라낸 그림이므로 nearest 확대(pixelated)를 끈다.
+   폭은 원본 비율대로 두고 좁은 화면에서만 줄인다. */
+.dot.art{max-width:100%;height:auto;image-rendering:auto;border-radius:3px}

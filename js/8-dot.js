@@ -12,6 +12,101 @@
    같은 id는 dataURL 로 캐시하므로 두 번째부터는 그리지 않는다. */
 "use strict";
 
+/* v3.3 — 도트 일러스트 시트
+   img/dot/*.png 로 잘라 둔 64장. [파일명, 표시폭, 표시높이] 이며
+   표시 크기는 원본 높이를 240px 기준으로 맞춘 값(최대 2.8배)이다.
+   여기 없는 id 는 아래 픽셀 엔진이 그대로 그린다. */
+const DOT_ART_DIR='img/dot/';
+const DOT_ART={
+  /* 기존 장면 키 → 시트 그림 */
+  trainSolo:['train-success',387,240],
+  trainSuccess:['train-success',387,240],
+  trainFail:['train-fail',395,240],
+  trainTeam:['train-team',353,240],
+  trainWeight:['train-recover',362,240],
+  trainSkill:['train-special',362,240],
+  statUp:['cond-best',215,240],
+  evStory:['season-mid',351,240],
+  evGood:['fame-up',213,240],
+  evBad:['coach-scold',180,240],
+  evRival:['at-bat',390,240],
+  evCoach:['coach-praise',191,240],
+  evTeam:['team-bond',207,240],
+  evContract:['contract-salary',325,146],
+  gameStart:['game-start',390,240],
+  gameWin:['win',394,240],
+  gameLose:['lose',349,240],
+  gameWalkoff:['walkoff',342,240],
+  gameComeback:['comeback',349,240],
+  gameBlowout:['blowout',337,240],
+  gameShutout:['no-hitter',344,224],
+  gameHomer:['homer',369,240],
+  momentWin:['score',391,240],
+  momentLose:['error',350,240],
+  seasonStart:['season-open',366,240],
+  seasonEnd:['season-end',358,240],
+  playoffIn:['postseason-in',327,240],
+  playoffOut:['postseason-out',315,240],
+  ksIn:['ks-in',318,240],
+  ksWin:['ks-win',393,240],
+  ksLose:['ks-lose',309,240],
+  awardMvp:['award-mvp',336,227],
+  awardRookie:['first-hit',280,207],
+  awardGlove:['award-glove',308,227],
+  awardTitle:['career-high',400,232],
+  injury:['injury',253,240],
+  rehab:['rehab',221,240],
+  slump:['cond-worst',216,240],
+  callUp:['return',240,240],
+  demote:['bench-alone',353,240],
+  retire:['retire-ceremony',297,235],
+  news:['interview',202,240],
+  money:['ad-offer',191,240],
+  /* 시트에서 새로 생긴 장면 (dot:'...' 으로 직접 지정 가능) */
+  rest:['rest',388,240],
+  trainOverload:['train-overload',329,240],
+  trainSpecial:['train-special',362,240],
+  trainRecover:['train-recover',362,240],
+  atBat:['at-bat',390,240],
+  hit:['hit',368,240],
+  strikeout:['strikeout',357,240],
+  greatDefense:['great-defense',353,240],
+  error:['error',350,240],
+  score:['score',391,240],
+  seasonMid:['season-mid',351,240],
+  seasonLate:['season-late',368,240],
+  playoffWin:['playoff-win',320,240],
+  playoffLose:['playoff-lose',318,240],
+  ksCelebrate:['ks-celebrate',289,240],
+  firstHit:['first-hit',280,207],
+  firstHomer:['first-homer',288,210],
+  allstar:['allstar',308,210],
+  noHitter:['no-hitter',344,224],
+  cycleHit:['cycle-hit',314,227],
+  hr100:['hr-100',342,230],
+  hit1000:['hit-1000',328,227],
+  hit2000:['hit-2000',339,230],
+  careerHigh:['career-high',400,232],
+  debut:['debut',328,148],
+  contractRookie:['contract-rookie',330,146],
+  contractSalary:['contract-salary',325,146],
+  contractFa:['contract-fa',319,146],
+  condBest:['cond-best',215,240],
+  condWorst:['cond-worst',216,240],
+  benchAlone:['bench-alone',353,240],
+  coachPraise:['coach-praise',191,240],
+  coachScold:['coach-scold',180,240],
+  teamBond:['team-bond',207,240],
+  fanGift:['fan-gift',181,240],
+  interview:['interview',202,240],
+  adOffer:['ad-offer',191,240],
+  fameUp:['fame-up',213,240],
+  careerPeak:['career-peak',344,238],
+  retireAnnounce:['retire-announce',328,235],
+  retireCeremony:['retire-ceremony',297,235],
+  numberRetired:['number-retired',319,235],
+};
+
 const DOT_W=64, DOT_H=32;
 /* 캐릭터는 2배(16px→32px)로 그리므로 32 높이 캔버스에 꽉 차 잘린다.
    캐릭터만 48 높이를 쓰고 위아래로 여백을 둔다. */
@@ -332,6 +427,12 @@ function dotURL(id,p){
 /* 씬에 넣는 HTML — 폭은 컨테이너에 맞추고 높이는 비율 유지 */
 function dotImg(id,p,cls){
   if(typeof document==='undefined')return '';
+  /* v3.3 — 시트 그림이 있으면 그걸 쓰고, 없으면 기존 픽셀 엔진으로 그린다.
+     캐릭터(char)는 상태 조합이 90가지라 그림으로 대체할 수 없어 그대로 둔다. */
+  const a=(id!=='char')&&DOT_ART[id];
+  if(a)return `<img class="dot art ${cls||''}" src="${DOT_ART_DIR}${a[0]}.png"
+    width="${a[1]}" height="${a[2]}" style="width:${a[1]}px" alt="" aria-hidden="true"
+    loading="lazy" decoding="async" draggable="false">`;
   return `<img class="dot ${cls||''}" src="${dotURL(id,p)}" alt="" aria-hidden="true"
     width="${DOT_W}" height="${id==='char'?CHAR_H:DOT_H}" draggable="false">`;
 }
@@ -348,6 +449,6 @@ function dotFor(kind,ctx){
     case 'games':      return ctx.hr?'gameHomer':ctx.shutout?'gameShutout':'gameStart';
     case 'moment':     return ctx.ok?'momentWin':'momentLose';
     case 'event':      return ctx.tone==='good'?'evGood':ctx.tone==='bad'?'evBad':'evStory';
-    default:           return DOT[kind]?kind:'evStory';
+    default:           return (DOT[kind]||DOT_ART[kind])?kind:'evStory';
   }
 }
