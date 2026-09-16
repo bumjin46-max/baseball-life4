@@ -130,18 +130,27 @@ function grow(p,o){
 }
 /* v3.1 (요구 2) — 나이대별 훈련 효율
    젊은 선수 = 성장 빠름 / 피로 높음,  고령 선수 = 성장 느림 / 피로 낮음 */
+/* v3.4 — 성장 곡선 재설계 (요구: 전성기를 27~29세로)
+   v3.3까지는 30세까지 성장이 이어지고 노화는 30세에야 시작돼 전성기 중앙이 32세였다.
+   총량은 비슷하게 두되 성장을 앞으로 당기고(24세 이하 강화) 30세 이후를 끊는다.
+   ※ ageEff / ageCurve / expGrowth / agingPhase 넷이 한 곡선을 이룬다. 하나만 바꾸면 안 된다. */
 function ageEff(p){
   const a=p.age;
-  if(a<=21)return {gain:1.5, fat:1.0, fatAdd:5, label:'유망주'};
-  if(a<=23)return {gain:1.25,fat:1.0, fatAdd:2, label:'성장기'};
-  if(a<=29)return {gain:1.0, fat:1.0, fatAdd:0, label:''};
-  if(a<=32)return {gain:0.75,fat:0.8, fatAdd:0, label:'전성기 후반'};
-  return         {gain:0.5, fat:0.55,fatAdd:0, label:'베테랑'};
+  if(a<=21)return {gain:1.6, fat:1.0, fatAdd:5, label:'유망주'};
+  if(a<=24)return {gain:1.3, fat:1.0, fatAdd:2, label:'성장기'};
+  if(a<=27)return {gain:1.0, fat:1.0, fatAdd:0, label:'전성기'};
+  if(a<=30)return {gain:0.62,fat:0.85,fatAdd:0, label:'전성기 후반'};
+  return         {gain:0.38,fat:0.6, fatAdd:0, label:'베테랑'};
 }
 function ageCurve(p){
   const a=p.age, late=tEff(p,'lateGrow');
-  if(a<=22)return 1.35; if(a<=27)return 1.05; if(a<=30)return .72;
-  if(a<=33)return .34+late*.4; return .12+late*.35;
+  if(a<=21)return 1.58;
+  if(a<=24)return 1.20;
+  if(a<=27)return .68;
+  if(a<=29)return .22+late*.30;
+  if(a<=31)return .03+late*.32;
+  if(a<=33)return .03+late*.30;
+  return .01+late*.20;
 }
 function potRoom(p,k){
   const gap=p.pot-p.st[k];
@@ -403,7 +412,7 @@ function segmentHighlight(p,seg){
   return null;
 }
 function expGrowth(p,full){ // 경기 경험 — 잠재력을 향해 서서히 수렴
-  const rate=(p.age<=22?.055:p.age<=26?.036:p.age<=29?.016:.004)*full*(1+tEff(p,'potential')*.5+tEff(p,'lateGrow')*.3);
+  const rate=(p.age<=21?.068:p.age<=24?.044:p.age<=27?.016:p.age<=29?.004:.001)*full*(1+tEff(p,'potential')*.5+tEff(p,'lateGrow')*.3);
   POS[p.pos].keys.forEach(k=>{
     const g=round((p.pot-p.st[k])*rate*R.f(.4,1.6),1);
     if(g>0.05)p.st[k]=clamp(round(p.st[k]+g,1),1,100);
@@ -592,9 +601,13 @@ function addTrait(p,id,replaceId){
    ========================================================================== */
 function agingPhase(p){
   const log=[];
-  if(p.age<30)return log;
-  const A=1+tEff(p,'aging');
-  const rate=(p.age>=36?R.f(2.4,4.2):p.age>=34?R.f(1.6,3.0):p.age>=32?R.f(.9,2.0):R.f(.4,1.2))*A;
+  /* v3.4 — 몸은 28세부터 조금씩 깎인다. 성장(ageCurve)이 아직 살아 있으므로
+     28~29세는 "성장 > 노화", 30세부터 역전된다. 그 교차점이 곧 전성기다. */
+  if(p.age<28)return log;
+  /* v3.4 — '몸에 돈을 쓴다'를 그 해에 했으면 감쇠가 25% 줄어든다 */
+  const A=(1+tEff(p,'aging'))*(p.careYear===p.year?.75:1);
+  const rate=(p.age>=36?R.f(3.4,5.2):p.age>=34?R.f(2.6,4.2):p.age>=32?R.f(2.0,3.4)
+             :p.age>=30?R.f(1.8,3.0):R.f(.7,1.6))*A;
   const phys=p.pos==='pitcher'?['velo','stamina','recovery']:['speed','run','stamina','defense'];
   const skill=p.pos==='pitcher'?['control','breaking','stuff','mental','crisis']
                                :['contact','eye','mental','throw','power','catching','blocking','lead'];
@@ -605,9 +618,13 @@ function agingPhase(p){
   });
   skill.forEach(k=>{
     if(p.st[k]===undefined)return;
-    if(p.age<=32){ if(R.c(.45))p.st[k]=clamp(round(p.st[k]+R.f(.2,.8),1),1,100); return; }
-    const d=round(rate*R.f(.15,.5)*A,1);
-    if(d>.1){p.st[k]=clamp(round(p.st[k]-d,1),1,100);dropped.push(`${SLABEL[k]} -${d}`);}
+    /* v3.4 — 기술 스탯은 27세까지만 늘고, 28~29세는 유지, 30세부터 깎인다.
+       (v3.3은 32세까지 늘어서 전성기가 뒤로 밀렸다) */
+    if(p.age<=27){ if(R.c(.32))p.st[k]=clamp(round(p.st[k]+R.f(.2,.7),1),1,100); return; }
+    if(p.age<=29)return;
+    const d2=round(rate*R.f(.25,.6)*A,1);
+    if(d2>.1){p.st[k]=clamp(round(p.st[k]-d2,1),1,100);dropped.push(`${SLABEL[k]} -${d2}`);}
+    return;
   });
   if(dropped.length)log.push(`몸이 달라졌다 — ${dropped.slice(0,6).join('  ')}`);
   return log;
@@ -638,16 +655,21 @@ function retireCheck(p){
   if(p.age>=36&&o<58)return true;
   if(p.age>=34&&o<52)return true;
   if(p.age>=31&&p.season.war<0.2&&p.injuries.length>=3)return true;
-  /* 큰 부상이 반복되면 전성기 전에도 몸이 먼저 그만둔다 */
+  /* 큰 부상이 반복되면 전성기 전에도 몸이 먼저 그만둔다
+     v3.4 — 기준을 27세 → 25세로 낮췄다. "짧고 굵게 타버린 커리어"가 실제로 나와야 한다. */
   const big=p.injuries.filter(x=>x.days>=90).length;
-  if(big>=2&&p.age>=27)return true;
+  if(big>=2&&p.age>=25)return true;
+  if(big>=2&&p.age>=23&&p.tot.war<2)return true;
   if(big>=3)return true;
-  if(p.injuries.length>=6&&p.age>=28&&p.season.war<1.5)return true;
+  if(p.injuries.length>=5&&p.age>=27&&p.season.war<1.0)return true;
+  /* v3.4 — 구단 목표를 계속 못 맞추면 구단이 먼저 정리한다 (요구: 더 가혹하게) */
+  if((p.goalMiss||0)>=3&&p.age>=28&&p.tot.war<10)return true;
+  if((p.goalMiss||0)>=2&&p.lv==='2군'&&p.age>=24&&p.tot.war<1.5)return true;
   /* v3.0 — 1군에 한 번도 자리잡지 못한 채 나이만 먹으면 구단이 먼저 정리한다
      (요구 35 "유망주 실패"). 단, 1군 기록이 쌓인 선수에게는 적용하지 않는다. */
   p.farmYears=(p.career.seasons||[]).filter(s=>s.lv==='2군').length;
-  if(p.lv==='2군'&&p.age>=28&&p.farmYears>=6&&p.tot.war<3)return true;
-  if(p.lv==='2군'&&p.age>=31&&p.tot.war<8)return true;
+  if(p.lv==='2군'&&p.age>=27&&p.farmYears>=5&&p.tot.war<3)return true;
+  if(p.lv==='2군'&&p.age>=29&&p.tot.war<8)return true;
   return false;
 }
 function decideEnding(p){

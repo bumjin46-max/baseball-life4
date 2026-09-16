@@ -182,6 +182,8 @@ function runPhase(ph){
     newSeason(p);
     p.nick=nickname(p);
     const cl=competitionCheck(p);
+    const gl=setSeasonGoal(p);                       // v3.4 — 구단이 올해 숫자를 제시한다
+    cl.push(`구단이 올 시즌 목표를 제시했다 — <em>${gl.text}</em>`);
     return scene({when:nowLabel('시즌 준비'),dot:'seasonStart',html:seasonCardHtml(p),log:cl,cta:'시즌 시작'});
   }
   case 'event':return storyEvent();
@@ -221,7 +223,9 @@ function runPhase(ph){
     if(!p.season)return 'skip';
     finalizeSeason(p);
     const got=awardsPhase(p);
+    const gr=settleSeasonGoal(p);                    // v3.4 — 목표 정산 (연봉·신뢰·방출 압박)
     const agl=agingPhase(p);
+    if(gr)agl.unshift(gr.log);
     p.nick=nickname(p);
     if(p.farm&&p.farm.g){p.season.farm={g:p.farm.g,h:p.farm.h,ab:p.farm.ab,hr:p.farm.hr,
       rbi:p.farm.rbi,ip:p.farm.ip,w:p.farm.w,er:p.farm.er,k:p.farm.k};}
@@ -489,8 +493,205 @@ const ACTIONS={
     run:p=>{
       if(!spend(p,1200,'장비'))return['잔고가 부족하다.'];
       p.gearYear=1;grow(p,{[W(p).key]:.8});p.cond=clamp(p.cond+1,0,4);
-      return[`손에 맞는 ${W(p).gear}는 생각보다 큰 차이를 만든다.`];}}
+      return[`손에 맞는 ${W(p).gear}는 생각보다 큰 차이를 만든다.`];}},
+
+  /* ══════════════════════════════════════════════════════════════
+     v3.4 — 커리어 단계별 행동 (요구: 180개월 내내 같은 메뉴를 보지 않게)
+     신인기 · 주전기 · 베테랑기가 각각 자기 시기에만 할 수 있는 것을 갖는다.
+     careerStage(p) 가 단계를 정하고 monthActions 가 여기서 골라 붙인다.
+     ══════════════════════════════════════════════════════════════ */
+
+  /* 신인기 — 실력 말고 눈에 띄는 쪽으로 승부한다 */
+  eyeCatch:{icon:'👀',name:'코치 눈에 들기',
+    gain:()=>`감독 ${ASD(5)} · 코치 ${ASD(6)} · 출전 기회 ↑`,
+    cost:()=>`피로 ${ASD(8)} · 성장 없음 · 선배 ${ASD(-3)}`,
+    run:p=>{
+      const log=scaledRun(q=>{
+        rel(q,'manager',5);rel(q,'coach',6);rel(q,'vet',-3);
+        tend(q,{diligence:2,social:1});
+        q.fatigue=clamp(q.fatigue+8,0,100);
+        q.pushCredit=(q.pushCredit||0)+1;      // rosterScene 이 콜업 판정에 쓴다
+        return[];},p);
+      return log.concat(['남들보다 한 시간 일찍 나갔다. 코치가 한 번 쳐다봤다.']);}},
+
+  /* 주전기 — 팀을 걸고 개인 기록을 노린다 */
+  chase:{icon:'🎯',name:'기록에 도전한다',
+    gain:()=>`${weekly()?'이번 주':'이번 달'} 성적 ↑↑ · 언론 ↑`,
+    cost:()=>`피로 ${ASD(12)} · 팀워크 ${ASD(-4)} · 부상 위험`,
+    run:p=>{
+      const log=scaledRun(q=>{
+        q.clutchBonus=clamp((q.clutchBonus||0)+5,-30,22);
+        rel(q,'team',-4);rel(q,'captain',-2);
+        q.media=clamp((q.media||50)+6,0,100);
+        tend(q,{competitive:4,social:-2});
+        q.fatigue=clamp(q.fatigue+12,0,100);
+        q.injRisk=(q.injRisk||0)+.08;
+        return[];},p);
+      return log.concat(['숫자가 눈에 밟혔다. 오늘은 팀보다 내 기록이었다.']);}},
+
+  /* 베테랑기 — 성적표에 남지 않는 것을 쌓는다 */
+  mentor:{icon:'🧑‍🏫',name:'후배를 지도한다',
+    gain:()=>`후배 ${ASD(7)} · 동료 ${ASD(4)} · 주장 ${ASD(3)} · 리더십 ↑`,
+    cost:()=>`성장 없음 · 피로 ${ASD(4)}`,
+    run:p=>{
+      const log=scaledRun(q=>{
+        rel(q,'rookie',7);rel(q,'team',4);rel(q,'captain',3);
+        tend(q,{leadership:4,patience:2});
+        q.fatigue=clamp(q.fatigue+4,0,100);
+        return[];},p);
+      flag(p,'mentored');
+      return log.concat(['묻지도 않았는데 자세를 고쳐줬다. 예전의 누군가가 그랬던 것처럼.']);}},
+
+  bodyCare:{icon:'🧊',name:'몸에 돈을 쓴다',
+    gain:'올해 노화 감쇠 완화 · 부상 위험 ↓',cost:'2,500만원 · 성장 없음',
+    run:p=>{
+      if(p.careYear===p.year)return['올해 몫은 이미 하고 있다.'];
+      if(!spend(p,2500,'몸 관리'))return['잔고가 부족하다.'];
+      p.careYear=p.year;p.injRisk=(p.injRisk||0)-.10;
+      p.fatigue=clamp(p.fatigue-8,0,100);
+      return['재활 트레이너, 식단, 수면까지 맡겼다. 서른을 넘으면 몸이 곧 돈이다.'];}},
+
+  coachStudy:{icon:'📋',name:'지도자 연수를 듣는다',
+    gain:'은퇴 이후의 길 · 코치 ↑ · 프런트 ↑',cost:'성장 없음 · 비시즌 한 달',
+    run:p=>{
+      const log=scaledRun(q=>{
+        rel(q,'coach',5);rel(q,'front',4);tend(q,{leadership:3,patience:2});
+        return[];},p);
+      p.coachStudy=(p.coachStudy||0)+1;
+      flag(p,'coachPath');
+      return log.concat([p.coachStudy>=3
+        ?'세 번째 연수. 은퇴 후가 더 이상 막막하지 않다.'
+        :'선수로 보던 야구와 가르치는 야구는 다른 경기였다.']);}},
+
+  adShoot:{icon:'📺',name:'광고를 찍는다',
+    gain:p=>`${wonText(adFee(p))} · 팬 ${ASD(4)} · 언론 ${ASD(5)}`,
+    cost:()=>`피로 ${ASD(6)} · 감독 ${ASD(-3)} · 성장 없음`,
+    run:p=>{
+      const fee=adFee(p);
+      p.money.balance+=fee;p.money.earned=(p.money.earned||0)+fee;
+      const log=scaledRun(q=>{
+        q.fanRating=clamp(q.fanRating+4,0,100);q.media=clamp((q.media||50)+5,0,100);
+        rel(q,'manager',-3);q.fatigue=clamp(q.fatigue+6,0,100);
+        return[];},p);
+      p.adYear=p.year;flag(p,'adModel');
+      return log.concat([`촬영장에서 하루를 다 썼다. 통장에 ${wonText(fee)}이 찍혔다.`]);}}
 };
+
+/* 광고료 — 인기와 언론 노출로 정해진다 */
+function adFee(p){
+  return Math.round((800+(p.fanRating||50)*38+(p.media||50)*22+(p.fame||0)*16)/100)*100;
+}
+
+/* v3.4 — 커리어 단계. 월간 메뉴와 시즌 목표가 같은 기준을 쓴다. */
+function careerStage(p){
+  if(p.lv==='2군'||p.seasonsPlayed<=2)return 'rookie';
+  if(p.age>=31||p.seasonsPlayed>=11)return 'vet';
+  return 'prime';
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   v3.4 — 시즌 목표 (요구: 매 시즌에 긴장 축 하나)
+   개막에 구단이 숫자 하나를 제시한다. 달성하면 보상, 실패가 쌓이면 자리가 위험해진다.
+   "이번 시즌을 왜 버티는가"에 답이 없던 중반부를 메우는 장치다.
+   ══════════════════════════════════════════════════════════════════════════ */
+const GOALS={
+  callup:{label:'1군 콜업',unit:'',fmt:v=>v?'달성':'미달',
+          read:p=>p.lv!=='2군'?1:0},
+  avg:   {label:'타율',unit:'',fmt:v=>avg3(v),
+          read:p=>p.season&&p.season.ab?p.season.h/p.season.ab:0},
+  hr:    {label:'홈런',unit:'개',fmt:v=>Math.round(v),read:p=>p.season?p.season.hr:0},
+  /* 결산(award)에서는 finalizeSeason 이 이미 season.war 를 확정한 뒤다.
+     warNow() 는 시즌 중 추정치이므로 확정값이 있으면 그쪽을 읽어야 한다. */
+  war:   {label:'WAR',unit:'',fmt:v=>round(v,1),
+          read:p=>!p.season?0:(p.season.war||round(warNow(p)||0,1))},
+  win:   {label:'승',unit:'승',fmt:v=>Math.round(v),read:p=>p.season?p.season.w:0},
+  era:   {label:'평균자책',unit:'',fmt:v=>round(v,2),lower:1,
+          read:p=>p.season&&p.season.ip?round(p.season.er*9/p.season.ip,2):9.99},
+  farmAvg:{label:'2군 타율',unit:'',fmt:v=>avg3(v),
+          read:p=>p.farm&&p.farm.ab?p.farm.h/p.farm.ab:0},
+  farmEra:{label:'2군 평균자책',unit:'',fmt:v=>round(v,2),lower:1,
+          read:p=>p.farm&&p.farm.ip?round(p.farm.er*9/p.farm.ip,2):9.99}
+};
+/* 목표치는 그 능력치대의 실제 중앙값에 맞춘다 — 절반쯤 달성하는 게 목표다.
+   계수는 종합 구간별 1군 성적 중앙값(표본 1600시즌) 회귀에서 뽑았다.
+   시뮬레이션 식(simHalf)을 손대면 이 숫자도 다시 재야 한다. */
+function makeSeasonGoal(p){
+  const o=ovr(p);
+  if(p.lv==='2군'){
+    /* 1군 문턱에 근접했으면 콜업을, 아직 멀면 2군에서의 숫자를 요구한다 */
+    if(o>=65)return {type:'callup',target:1};
+    return p.pos==='pitcher'
+      ? {type:'farmEra',target:round(clamp(11.4-o*.099,3.00,6.00),2)}
+      : {type:'farmAvg',target:round(clamp(.128+o*.0027,.255,.340),3)};
+  }
+  if(p.pos==='pitcher'){
+    if(p.lv==='불펜')return {type:'war',target:Math.max(.5,round(o*.11-6.8,1))};
+    return R.c(.5)
+      ? {type:'era',target:round(clamp(11.15-o*.0975,2.58,5.30),2)}
+      : {type:'win',target:clamp(Math.round(o*1.45-90),6,26)};
+  }
+  if(p.lv==='백업')return {type:'war',target:Math.max(.5,round(o*.11-6.8,1))};
+  const r=R.i(0,2);
+  if(r===0)return {type:'avg',target:round(clamp(.154+o*.00192,.250,.330),3)};
+  if(r===1)return {type:'hr',target:(o<=69?5:o<=74?18:o<=79?23:26)+R.i(-2,2)};
+  return {type:'war',target:Math.max(.8,round(o*.194-11.9,1))};
+}
+function setSeasonGoal(p){
+  const g=makeSeasonGoal(p);
+  const G_=GOALS[g.type];
+  g.label=G_.label; g.lower=!!G_.lower;
+  g.text=g.type==='callup'?'올 시즌 안에 1군 엔트리에 들 것'
+        :`${G_.label} ${G_.fmt(g.target)}${G_.unit}${g.lower?' 이하':' 이상'}`;
+  p.goal=g;
+  return g;
+}
+function goalNow(p){ return p.goal?GOALS[p.goal.type].read(p):0; }
+/* 개막 직후엔 표본이 0이라 ".000 / .255 미달"이 뜬다 — 그건 실패가 아니라 집계 전이다. */
+function goalRated(p){
+  if(!p.goal)return false;
+  const t=p.goal.type, s=p.season, f=p.farm;
+  if(t==='callup')return true;
+  if(t==='avg'||t==='hr')return !!(s&&s.ab>=30);
+  if(t==='war')return !!(s&&s.g>=10);
+  if(t==='era'||t==='win')return !!(s&&s.ip>=20);
+  if(t==='farmAvg')return !!(f&&f.ab>=25);
+  if(t==='farmEra')return !!(f&&f.ip>=15);
+  return true;
+}
+function goalMet(p){
+  if(!p.goal)return true;
+  const v=goalNow(p);
+  /* 투수 평균자책은 규정이닝을 못 채우면 판정하지 않는다 (0이닝 1.00은 달성이 아니다) */
+  if(p.goal.type==='era'&&(!p.season||p.season.ip<80))return false;
+  if(p.goal.type==='farmEra'&&(!p.farm||p.farm.ip<40))return false;
+  return p.goal.lower ? v<=p.goal.target : v>=p.goal.target;
+}
+function goalText(p){
+  if(!p.goal)return '';
+  const G_=GOALS[p.goal.type];
+  return `${p.goal.label} ${goalRated(p)?G_.fmt(goalNow(p)):'—'} / ${G_.fmt(p.goal.target)}${G_.unit}`;
+}
+/* 시즌 결산에서 정산한다. 연속 실패는 자리를 위협한다 (요구: 더 가혹하게) */
+function settleSeasonGoal(p){
+  if(!p.goal)return null;
+  const ok=goalMet(p), G_=GOALS[p.goal.type];
+  const line=`구단 목표 — ${p.goal.text} → ${G_.fmt(goalNow(p))}${G_.unit}`;
+  if(ok){
+    p.goalMiss=0; p.goalHit=(p.goalHit||0)+1;
+    const bonus=Math.round(p.money.salary*.18/100)*100;
+    p.money.balance+=bonus;p.money.earned=(p.money.earned||0)+bonus;
+    rel(p,'manager',7);rel(p,'front',6);
+    p.fanRating=clamp(p.fanRating+4,0,100);
+    flag(p,'goalHit');
+    return{ok:true,line,log:`${line}  <em>달성</em> — 옵션 ${wonText(bonus)}이 붙었다.`};
+  }
+  p.goalMiss=(p.goalMiss||0)+1;
+  rel(p,'manager',-8);rel(p,'front',-7);
+  p.fanRating=clamp(p.fanRating-3,0,100);
+  p.stress=clamp((p.stress||20)+8,0,100);
+  if(p.goalMiss>=2)flag(p,'goalMissed');
+  return{ok:false,line,log:`${line}  <em>미달</em>${p.goalMiss>=2?` — ${p.goalMiss}년 연속이다. 구단의 눈빛이 달라졌다.`:'.'}`};
+}
 
 /* 상태에 따라 가능한 행동이 달라진다 (요구 3) */
 function monthActions(p){
@@ -504,6 +705,19 @@ function monthActions(p){
   list.push('teamTrain','soloTrain');
   if(m.season&&p.lv!=='2군')list.push('focus');
   if(m.season&&p.lv==='2군')list.push('push');
+
+  /* v3.4 — 커리어 단계별 행동. 같은 메뉴를 180개월 보지 않도록,
+     시기마다 그 시기에만 할 수 있는 선택지를 끼워 넣는다. */
+  const stage=careerStage(p);
+  if(stage==='rookie'&&p.lv!=='주전'&&p.lv!=='선발')list.push('eyeCatch');
+  if(stage==='prime'&&m.season&&p.lv!=='2군')list.push('chase');
+  if(stage==='vet'){
+    list.push('mentor');
+    if(p.money.balance>=2500&&p.careYear!==p.year)list.push('bodyCare');
+    if(!m.season)list.push('coachStudy');
+  }
+  if(!m.season&&(p.fanRating||0)>=55&&p.adYear!==p.year)list.push('adShoot');
+
   list.push('rest','hobby','relation');
   if(!m.season&&!p.money.trainer&&p.money.balance>=1800)list.push('trainer');
   if(!m.season&&p.money.balance>=1200&&!p.gearYear)list.push('gear');

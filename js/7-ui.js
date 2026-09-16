@@ -5,7 +5,7 @@
 "use strict";
 
 /* 빌드 표기 — 타이틀 화면 하단 buildbar에서 사용한다. */
-const BUILD="v3.3";
+const BUILD="v3.4";
 const BUILD_DATE="2026-09-16";
 
 /* ==========================================================================
@@ -277,6 +277,9 @@ function migrate(p){
   d('monthLog',[]); d('relLog',[]); d('month',1); d('week',0);
   d('monthAcc',{ip:0,er:0,ab:0,h:0});
   d('vetPos',p.pos); d('farm',null); d('gearYear',0);
+  /* v3.4 — 시즌 목표 · 단계별 행동 */
+  d('goal',null); d('goalMiss',0); d('goalHit',0);
+  d('careYear',0); d('adYear',0); d('coachStudy',0); d('pushCredit',0);
   if(!p.money)p.money=Object.assign({},MONEY0);
   if(typeof p.slump!=='object'||!p.slump)p.slump={active:false,since:null,depth:0,months:0};
   if(p.rel&&p.rel.fan===undefined)p.rel.fan=50;
@@ -636,6 +639,10 @@ function boardHtml(p){
     ${line?`<div class="lb-season"><span class="lbl">${p.year} 1군</span>
       ${line.map(([v,l])=>`<span class="st"><b>${v}</b>${l?`<i>${l}</i>`:''}</span>`).join('')}</div>`:
       (farmLine?'':`<div class="lb-season"><span class="lbl">${m.season?'시즌 준비':'비시즌'}</span></div>`)}
+    ${p.goal?`<div class="lb-goal">
+      <span class="lbl">구단 목표</span><span class="gv">${esc(goalText(p))}</span>
+      <span class="${!goalRated(p)?'dim':goalMet(p)?'up':'down'}">${!goalRated(p)?'집계 전':goalMet(p)?'달성':'미달'}</span>
+      ${p.goalMiss>=2?`<span class="tagx">${p.goalMiss}년 연속 미달</span>`:''}</div>`:''}
     ${recent.length?`<div class="lb-recent">${recent.map(r=>`<div>· ${esc(String(r).replace(/<[^>]+>/g,''))}</div>`).join('')}</div>`:''}
   </div>`;
 }

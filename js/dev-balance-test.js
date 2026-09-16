@@ -143,7 +143,9 @@ function runBalanceTest(n){
      월간(연 9회)보다 "아무렇게나 고르는" 페널티가 커서 실패율이 구조적으로 5%p 높다.
      사람이 고르면 이보다 낮다. 측정 대상이 바뀌었으므로 기준도 함께 옮긴다. */
   console.log(`  실패한 커리어(WAR 10-) ${_judge('실패 비율',_fail,20,50,'%')}   ← 요구 35: 실패도 하나의 인생`);
-  console.log(`  커리어 길이 ${_judge('커리어 길이',_avg(R_.seasons),14,17,'시즌')}`);
+  /* v3.4 — 난이도를 올리며 기준선을 14~17 → 13~16으로 내렸다.
+     조기 은퇴(부상·방출)를 살린 만큼 평균 커리어가 짧아지는 게 정상이다. */
+  console.log(`  커리어 길이 ${_judge('커리어 길이',_avg(R_.seasons),13,16,'시즌')}`);
   console.log(`  커리어당 부상 ${_judge('부상',_avg(R_.inj),1.8,2.8,'회')} · 최고 능력치 ${R_.maxStat}`);
   console.log(`  MVP ${R_.mvp}회 · 올스타 ${R_.allstar}회 · 우승 ${R_.champ}회 (${n}커리어 합계)`);
   const wb={};R_.war.forEach(w=>{const k=w<0?'  <0':w<10?' 0-10':w<25?'10-25':w<45?'25-45':w<70?'45-70':'  70+';wb[k]=(wb[k]||0)+1;});
@@ -166,8 +168,10 @@ function runBalanceTest(n){
 
   sec('v3.1 — 커리어 갈림 (요구 17)');
   console.log(`  FA 이적률 ${R_.faElig?_pct(R_.faMove,R_.faElig):0}% (자격 ${R_.faElig}명)`+
-    ` · 신인왕 ${_pct(R_.rookieWin,n)}% · 조기 은퇴(7시즌 이하) ${_pct(R_.earlyRetire,n)}%`);
-  console.log(`  전성기 나이 중앙 ${_q(R_.peakAge,.5)}세`);
+    ` · 신인왕 ${_pct(R_.rookieWin,n)}%`);
+  /* v3.4 — 조기 은퇴는 v3.3까지 0%(죽은 콘텐츠)였다. 이제 기준을 두고 지킨다. */
+  console.log(`  조기 은퇴(7시즌 이하) ${_judge('조기 은퇴',_pct(R_.earlyRetire,n),6,18,'%')}`);
+  console.log(`  전성기 나이 ${_judge('전성기 나이',_q(R_.peakAge,.5),27,29,'세')}`);
 
   sec('27. 엔딩 분포');
   const es=Object.entries(R_.endings).sort((a,b)=>b[1]-a[1]);
