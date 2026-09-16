@@ -77,7 +77,7 @@ const CUL=id=>CULTURE[id]||CULTURE.seoul;
 const T=(id,grade,pos,desc,eff,extra={})=>({id,grade,pos,desc,eff,...extra});
 const TRAITS=[
 /* ── 공통 ── */
-T('노력파','일반','all','훈련 효과 +8%',{train:.08},{prob:(p)=>p.tend.diligence>=74?.3:0, evolve:{to:'연습벌레',cond:p=>p.tend.diligence>=82&&p.trainCount>=16}}),
+T('노력파','일반','all','훈련 효과 +8%',{train:.08},{prob:(p)=>p.tend.diligence>=74?.3:0, evolve:{to:'연습벌레',cond:p=>p.tend.diligence>=86&&p.trainCount>=26}}),
 T('연습벌레','희귀','all','훈련 효과 +16%, 체력 소모 증가',{train:.16,staminaCost:.2}),
 T('천재','영웅','all','잠재력 활용 효율 +25%, 일반 훈련 효과는 낮다',{potential:.25,train:-.05},{prob:p=>p.pot>=88&&p.age<=22?.3:0, evolve:{to:'야구천재',cond:p=>p.pot>=92&&ovr(p)>=85}}),
 T('야구천재','전설','all','성장 한계를 스스로 밀어낸다',{potential:.4,train:.05}),
@@ -129,7 +129,7 @@ T('철벽수비','희귀','all','수비 +9, 실책 감소',{defense:9},{evolve:{
 T('명품수비','영웅','all','수비로만 승리를 만든다',{defense:14,teamB:1}),
 T('강견','일반','all','송구 +6',{throw:6},{prob:p=>p.st.throw>=80?.4:0, evolve:{to:'레이저암',cond:p=>p.st.throw>=90}}),
 T('레이저암','희귀','all','송구 +11',{throw:11}),
-T('허슬플레이','일반','all','팬 평가 +, 부상 위험 소폭 증가',{fan:2,injury:.12},{prob:p=>p.tend.competitive>=80&&p.fanRating>=60?.12:0}),
+T('허슬플레이','일반','all','팬 평가 +, 부상 위험 소폭 증가',{fan:2,injury:.12},{prob:p=>p.tend.competitive>=85&&p.fanRating>=66?.10:0}),
 /* ── 포수 ── */
 T('명포수','희귀','catcher','리드 +8, 팀 투수진 강화',{lead:8,teamB:2},{prob:p=>p.st.lead>=78?.45:0, evolve:{to:'안방마님',cond:p=>p.career.seasons.length>=8&&p.st.lead>=88}}),
 T('투수조련사','희귀','catcher','팀 평균자책점 개선',{teamB:3,lead:5},{prob:p=>p.st.lead>=74&&p.tend.leadership>=65?.4:0}),

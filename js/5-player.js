@@ -117,6 +117,17 @@ function ab(p,key){ // 경기용 실효 능력치
 /* ── 성향/관계/플래그/성장 ── */
 function tend(p,o){for(const k in o)p.tend[k]=clamp((p.tend[k]||50)+o[k],0,100);}
 function rel(p,k,v){p.rel[k]=clamp((p.rel[k]||50)+v,0,100);}
+/* v3.7 — 관계는 쌓기만 하고 식지 않으면 금방 전부 100이 된다.
+   v3.6에서 그룹2가 매주 돌면서 관계 행동이 4배가 됐고, 실측 결과 팬·코치·동료가
+   커리어 중반이면 전부 상한에 붙어 "관계를 관리한다"는 선택이 의미를 잃었다.
+   매달 조금씩 중립(50)으로 되돌려, 유지에도 비용이 들게 한다. */
+function relDrift(p){
+  if(!p||!p.rel)return;
+  for(const k in p.rel){
+    const v=p.rel[k]; if(v===undefined)continue;
+    p.rel[k]=clamp(round(v+(50-v)*.035,1),0,100);
+  }
+}
 /* v3.0 — 모든 플래그가 "언제 세워졌는지"를 남긴다. flagYear(p,f)로 읽는다 (요구 24) */
 function flag(p,f,meta){
   if(p.flags.includes(f))return;
@@ -147,8 +158,8 @@ function ageCurve(p){
   if(a<=21)return 1.58;
   if(a<=24)return 1.20;
   if(a<=27)return .68;
-  if(a<=29)return .22+late*.30;
-  if(a<=31)return .03+late*.32;
+  if(a<=29)return .17+late*.30;
+  if(a<=31)return .02+late*.30;
   if(a<=33)return .03+late*.30;
   return .01+late*.20;
 }
@@ -161,7 +172,10 @@ function potRoom(p,k){
    v3.0: v2.1은 훈련 기회가 연 2회였는데 월간 시스템에서는 연 최대 9회다.
    회당 성장을 그대로 두면 커리어 WAR 중앙값이 21 → 29로 튄다(실측).
    TRAIN_SCALE로 회당 성장을 낮춰 연간 총 성장량을 v2.1 수준에 맞춘다. */
-const TRAIN_SCALE=.68;
+/* v3.6 — 주간 행동이 그룹1·그룹2 두 칸으로 나뉘면서 훈련 기회가 약 1.5배로 늘었다.
+   회당 성장을 낮춰 연간 총 성장량을 v3.5 수준으로 되돌린다.
+   (그룹을 다시 합치거나 칸을 늘리면 이 값을 반드시 다시 재야 한다) */
+const TRAIN_SCALE=.30;
 function doTraining(p,t,mult0,fatMul){
   mult0=mult0||1;fatMul=fatMul===undefined?1:fatMul;
   const log=[];
@@ -607,7 +621,7 @@ function agingPhase(p){
   /* v3.4 — '몸에 돈을 쓴다'를 그 해에 했으면 감쇠가 25% 줄어든다 */
   const A=(1+tEff(p,'aging'))*(p.careYear===p.year?.75:1);
   const rate=(p.age>=36?R.f(3.4,5.2):p.age>=34?R.f(2.6,4.2):p.age>=32?R.f(2.0,3.4)
-             :p.age>=30?R.f(1.8,3.0):R.f(.7,1.6))*A;
+             :p.age>=30?R.f(2.3,3.7):R.f(.9,2.0))*A;
   const phys=p.pos==='pitcher'?['velo','stamina','recovery']:['speed','run','stamina','defense'];
   const skill=p.pos==='pitcher'?['control','breaking','stuff','mental','crisis']
                                :['contact','eye','mental','throw','power','catching','blocking','lead'];
@@ -694,9 +708,48 @@ const REVEAL={FULL:'FULL',PARTIAL:'PARTIAL',HIDDEN:'HIDDEN',RUMOR:'RUMOR'};
 
 function validateOutcomes(c){
   if(!c.outcomes)return;
+  if(c.check){
+    /* 능력치 판정은 성공/실패 풀 안에서만 p 를 가중치로 쓴다 — 합이 1일 필요가 없다.
+       대신 ok:1 이 정확히 하나는 있어야 한다. */
+    const ok=c.outcomes.filter(o=>o.ok).length;
+    if(ok!==1)console.warn(`[판정 검증] "${c.t}" 선택지에 ok:1 결과가 ${ok}개입니다 (1개여야 합니다)`);
+    return;
+  }
   const sum=c.outcomes.reduce((s,o)=>s+o.p,0);
   if(Math.abs(sum-1)>0.001)
     console.warn(`[확률 검증] "${c.t}" 선택지의 확률 합이 ${round(sum*100,1)}% 입니다 (100%가 되어야 합니다)`);
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   v3.7 — 능력치 판정 (check)
+   확률만 굴리면 "내 능력 때문에 됐다"는 실감이 없다. check 를 단 선택지는
+   기준 능력치와의 차이로 성공률이 정해진다.
+     기준 +band 이상 → 반드시 성공 · 기준 −band 이하 → 반드시 실패 · 사이는 선형
+   outcomes 중 ok:1 이 성공 결과, 나머지는 실패 쪽에서 p 가중치로 고른다.
+   band 를 좁히면 칼같은 판정, 넓히면 도박에 가까워진다 (기본 12).
+   ══════════════════════════════════════════════════════════════════════════ */
+const CHECK_LABEL={
+  ovr:'종합',fan:'팬 인기',fame:'유명세',media:'언론 관심',
+  diligence:'성실성',competitive:'승부욕',leadership:'리더십',patience:'인내심',
+  loyalty:'충성도',selfish:'자기중심',social:'사교성',star:'스타성',
+  manager:'감독 신뢰',coach:'코치 신뢰',front:'프런트 신뢰',team:'동료 신뢰',
+  vet:'선배 신뢰',captain:'주장 신뢰',rookie:'후배 신뢰',fanRel:'팬 호감'
+};
+function checkValue(p,k){
+  if(k==='ovr')return ovr(p);
+  if(k==='fan')return p.fanRating;
+  if(k==='fame')return p.fame||0;
+  if(k==='media')return p.media||50;
+  if(p.st&&p.st[k]!==undefined)return p.st[k];
+  if(p.tend&&p.tend[k]!==undefined)return p.tend[k];
+  if(p.rel&&p.rel[k]!==undefined)return p.rel[k];
+  return 50;
+}
+function checkLabel(k){return (typeof SLABEL!=='undefined'&&SLABEL[k])||CHECK_LABEL[k]||k;}
+function checkInfo(p,c){
+  const ck=c&&c.check; if(!ck)return null;
+  const v=checkValue(p,ck.k), band=ck.band||12;
+  return {k:ck.k,label:ck.label||checkLabel(ck.k),v:Math.round(v),need:ck.need,band,
+          succ:clamp(.5+(v-ck.need)/(2*band),0,1)};
 }
 /* 숨겨진 성향이 확률을 조용히 밀어준다 — 플레이어에게 계산식은 공개하지 않는다 */
 function biasedWeights(p,c){
@@ -709,12 +762,27 @@ function biasedWeights(p,c){
     return Math.max(.0005,w);
   });
 }
-function rollOutcome(p,c){
-  validateOutcomes(c);
-  const w=biasedWeights(p,c), tot=w.reduce((a,b)=>a+b,0);
+function pickWeighted(list){
+  const w=list.map(x=>Math.max(.0005,x.p===undefined?1:x.p)),tot=w.reduce((a,b)=>a+b,0);
   let r=Math.random()*tot,i=0;
   while(i<w.length-1&&r>w[i]){r-=w[i];i++;}
-  const o=c.outcomes[i];
+  return list[i];
+}
+function rollOutcome(p,c){
+  validateOutcomes(c);
+  let o=null;
+  /* v3.7 — 능력치 판정이 걸린 선택지는 성공 여부를 먼저 가른다 */
+  const ci=checkInfo(p,c);
+  if(ci){
+    const ok=c.outcomes.filter(x=>x.ok), bad=c.outcomes.filter(x=>!x.ok);
+    if(ok.length&&bad.length)o=pickWeighted(Math.random()<ci.succ?ok:bad);
+  }
+  if(!o){
+    const w=biasedWeights(p,c), tot=w.reduce((a,b)=>a+b,0);
+    let r=Math.random()*tot,i=0;
+    while(i<w.length-1&&r>w[i]){r-=w[i];i++;}
+    o=c.outcomes[i];
+  }
   const log=applyResult(p,o.res||{});
   if(o.res&&o.res.text)log.unshift(o.res.text);
   else log.unshift(o.label||'…');
@@ -742,6 +810,23 @@ function applyResult(p,res){
 function oddsHtml(p,c){
   if(c.odds)  // 훈련처럼 직접 계산한 확률
     return `<div class="odds">${c.odds.map(o=>`<div><b>${o.pct}%</b><span>${esc(o.text)}</span></div>`).join('')}</div>`;
+  /* v3.7 — 능력치 판정: 무엇이 얼마나 필요한지 고르기 전에 보여준다 */
+  const ci=checkInfo(p,c);
+  if(ci){
+    const cls=ci.succ>=1?'ok':ci.succ<=0?'no':'mid';
+    const pct=Math.round(ci.succ*100);
+    const verdict=ci.succ>=1?'해낸다'
+                 :ci.succ<=0?'지금 실력으론 무리다'
+                 :ci.succ>=.75?`해볼 만하다 · ${pct}%`
+                 :ci.succ>=.4 ?`아슬아슬하다 · ${pct}%`
+                 :`쉽지 않다 · ${pct}%`;
+    const okO=(c.outcomes||[]).find(o=>o.ok), badO=(c.outcomes||[]).find(o=>!o.ok);
+    const show=(c.reveal||'PARTIAL')!=='HIDDEN'&&okO&&badO;
+    return `<div class="chk ${cls}">
+        <span class="ck">${esc(ci.label)} <b>${ci.need}</b> 필요 <span class="dim">· 현재</span> <b>${ci.v}</b></span>
+        <span class="ckv">${verdict}</span></div>
+      ${show?`<div class="cs">성공 — ${esc(okO.label)} <span class="dim">/</span> 실패 — ${esc(badO.label)}</div>`:''}`;
+  }
   if(!c.outcomes)return c.s?`<div class="cs">${esc(c.s)}</div>`:'';
   const lv=c.reveal||'PARTIAL';
   if(lv==='HIDDEN')return `<div class="cs">어떤 결과가 기다리는지는 알 수 없다.</div>`;

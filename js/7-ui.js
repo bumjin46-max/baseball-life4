@@ -5,7 +5,7 @@
 "use strict";
 
 /* 빌드 표기 — 타이틀 화면 하단 buildbar에서 사용한다. */
-const BUILD="v3.5";
+const BUILD="v3.7";
 const BUILD_DATE="2026-09-16";
 
 /* ==========================================================================
@@ -54,8 +54,9 @@ function careerTable(p){
 /* 선택지의 문구가 포지션에 따라 달라질 수 있다 — 함수면 풀어서 쓴다 */
 function txt(v,p){return typeof v==='function'?v(p):v;}
 function mapChoices(list,p){
+  /* v3.7 — check 를 빠뜨리면 판정이 통째로 죽는다. 필드를 늘릴 때 여기도 같이 늘려야 한다. */
   return list.map(c=>({t:txt(c.t,p),s:txt(c.s,p),risk:c.risk,reveal:c.reveal,
-    outcomes:c.outcomes,run:c.run?(()=>c.run(p)):null}));
+    check:c.check,outcomes:c.outcomes,run:c.run?(()=>c.run(p)):null}));
 }
 /* ── 스토리 이벤트 ── */
 function storyEvent(){
@@ -796,8 +797,56 @@ function sceneHtml(u){
         <div class="ct">${c.risk?`<span class="rb ${c.risk}">${RISK_LABEL[c.risk]}</span>`:''}${esc(c.t)}</div>
         ${(c.gain||c.cost)?`<div class="tradeoff">${c.gain?`<span class="gain">+ ${esc(c.gain)}</span>`:''}${c.cost?`<span class="cost">− ${esc(c.cost)}</span>`:''}</div>`:''}
         ${oddsHtml(G.p,c)}</button>`).join('')}</div>`:''}
+    ${u.groups?groupsHtml(u):''}
     ${u.cta?`<button class="go" onclick="advance()">${esc(u.cta)}</button>`:''}
   </div>`;
+}
+/* v3.6 — 두 그룹을 한 화면에 그린다. 각 그룹에서 하나씩 고르면 확정이 열린다. */
+function groupsHtml(u){
+  if(!G.pick)G.pick={g1:null,g2:null};
+  const need=u.groups.filter(g=>g.choices.length);
+  const ready=need.every(g=>G.pick['g'+g.key]);
+  return u.groups.map(g=>{
+    if(!g.choices.length)return '';
+    const sel=G.pick['g'+g.key];
+    return `<div class="actgrp">
+      <span class="gname">${esc(g.label)}</span>
+      <span class="${sel?'picked':'dim sm'}">${sel?esc(sel.label):'하나 고르기'}</span></div>
+    <div class="choices acts">${g.choices.map((c,i)=>
+      `<button class="choice${sel&&sel.id===c.id?' on':''}" onclick="pickAct(${g.key},${i})">
+        <div class="ct">${c.risk?`<span class="rb ${c.risk}">${RISK_LABEL[c.risk]}</span>`:''}${esc(c.t)}</div>
+        ${(c.gain||c.cost)?`<div class="tradeoff">${c.gain?`<span class="gain">+ ${esc(c.gain)}</span>`:''}${c.cost?`<span class="cost">− ${esc(c.cost)}</span>`:''}</div>`:''}
+        ${oddsHtml(G.p,c)}</button>`).join('')}</div>`;
+  }).join('')
+  +`<button class="go confirm" ${ready?'':'disabled'} onclick="runPicks()">
+      ${ready?`이대로 한다 <span class="picksum">${need.map(g=>esc(G.pick['g'+g.key].label)).join(' + ')}</span>`
+             :`${need.filter(g=>!G.pick['g'+g.key]).map(g=>esc(g.label)).join(' · ')} — 아직 안 골랐다`}</button>`;
+}
+/* 그룹에서 하나를 고른다 — 하위 메뉴가 있으면 예약 모드로 들어갔다 돌아온다 */
+function pickAct(gk,i){
+  const g=(G.ui.groups||[]).find(x=>x.key===gk);
+  if(!g)return;
+  const c=g.choices[i];
+  if(c.next){G.picking=gk;G.pickPrefix=c.t;c.next();return;}
+  setPick(gk,c.id,c.t,c);
+  render();
+}
+function setPick(gk,id,label,c){
+  if(!G.pick)G.pick={g1:null,g2:null};
+  G.pick['g'+gk]={id,label,exec:()=>(c.outcomes?rollOutcome(G.p,c):(c.run?c.run():[]))||[]};
+}
+/* 확정 — 그룹1 · 그룹2 를 순서대로 실행하고 결과를 한 화면에 모은다 */
+function runPicks(){
+  const p=G.p,before=snapStats(p),fb=p.flags.length;
+  const picks=[G.pick&&G.pick.g1,G.pick&&G.pick.g2].filter(Boolean);
+  if(!picks.length)return;
+  let log=[];
+  picks.forEach(pk=>{ log=log.concat(pk.exec()||[]); });
+  logChoice(p,G.ui.title,picks.map(x=>x.label).join(' + '),p.flags.length>fb);
+  G.pick={g1:null,g2:null};
+  if(p.retired)return;
+  scene({when:G.ui.when,title:G.ui.title,body:'',log:log.length?log:['…'],
+    diff:statDiff(p,before),cta:'계속',after:G.ui.after});
 }
 /* ── 선택 처리 ── */
 function logChoice(p,title,pick,mark){
@@ -808,6 +857,14 @@ function logChoice(p,title,pick,mark){
 function choose(i){
   const c=G.ui.choices[i];
   if(c.next){c.next();return;}
+  /* v3.6 — 그룹 선택 중 하위 메뉴(훈련 종목·취미·관계)에서 고른 것은
+     즉시 실행하지 않고 예약만 하고 행동 화면으로 돌아간다. */
+  if(G.picking){
+    const gk=G.picking,pre=G.pickPrefix;
+    setPick(gk,'sub:'+c.t,(pre?pre.replace(/^\S+\s/,'')+' · ':'')+c.t,c);
+    G.picking=0;G.pickPrefix='';
+    return actionMenu();
+  }
   const p=G.p,before=snapStats(p),fb=p.flags.length;
   const log=(c.outcomes?rollOutcome(p,c):(c.run()||[]));
   if(G.ui.track)logChoice(p,G.ui.title,c.t,p.flags.length>fb);

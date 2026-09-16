@@ -492,3 +492,32 @@ table.rec tr.farm td{color:var(--chalk-dim);font-style:italic}
   .lifeboard.slim .lb-top{padding:7px 10px 5px}
   .lb-fat{padding:5px 10px 6px}
 }
+
+/* v3.6 — 주간 2그룹 행동 */
+.actgrp{display:flex;align-items:baseline;gap:8px;margin:16px 0 7px;flex-wrap:wrap}
+.actgrp:first-of-type{margin-top:10px}
+.actgrp .gname{font-size:11.5px;color:var(--clay);font-weight:700;letter-spacing:.06em}
+.actgrp .picked{font-size:12.5px;color:var(--lamp);font-weight:700}
+.choice.on{background:rgba(245,196,81,.13);border-color:rgba(245,196,81,.6)}
+.choice.on .ct::after{content:'✓';margin-left:7px;color:var(--lamp)}
+.go.confirm{margin-top:16px}
+.go.confirm[disabled]{background:rgba(255,255,255,.07);color:var(--chalk-dim);cursor:default}
+
+/* 확정 버튼은 목록이 길어도 늘 손에 닿아야 한다 — 하단 네비 바로 위에 붙인다 */
+.go.confirm .picksum{display:block;font-size:11.5px;font-weight:700;opacity:.8;margin-top:3px}
+@media(max-width:940px){
+  .go.confirm{position:sticky;bottom:calc(60px + env(safe-area-inset-bottom));z-index:35;
+    box-shadow:0 8px 22px rgba(0,0,0,.5)}
+}
+
+/* v3.7 — 능력치 판정 표시 */
+.chk{display:flex;flex-wrap:wrap;gap:3px 10px;align-items:baseline;
+  margin-top:6px;font-size:11.5px;line-height:1.5}
+.chk .ck{color:var(--chalk-dim)}
+.chk .ck b{font-family:var(--digit);font-size:14px;color:var(--chalk);letter-spacing:.03em}
+.chk .ckv{font-weight:700;font-size:11.5px}
+.chk.ok .ckv{color:var(--green)}
+.chk.ok .ck b{color:var(--green)}
+.chk.mid .ckv{color:var(--lamp)}
+.chk.no .ckv{color:var(--red)}
+.chk.no .ck b{color:var(--red)}

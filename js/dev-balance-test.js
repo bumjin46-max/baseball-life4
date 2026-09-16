@@ -7,6 +7,24 @@
    ※ 배포 시 index.html 에서 이 <script> 한 줄만 지우면 된다. */
 "use strict";
 
+/* v3.6 — 행동 화면이 "그룹1 하나 + 그룹2 하나"가 되면서 choose() 하나로는 못 넘긴다.
+   그룹마다 무작위로 하나씩 고르고(하위 메뉴가 나오면 거기서도 하나) 확정까지 누른다. */
+function autoAct(){
+  let guard=0;
+  for(const g of (G.ui.groups||[])){
+    if(!g.choices.length)continue;
+    pickAct(g.key,Math.floor(Math.random()*g.choices.length));
+    while(G.picking&&G.ui.choices&&guard++<24){
+      const idx=[];
+      G.ui.choices.forEach((c,i)=>{if(c.t!=='돌아간다')idx.push(i);});
+      if(!idx.length){G.picking=0;actionMenu();break;}
+      choose(idx[Math.floor(Math.random()*idx.length)]);
+    }
+  }
+  if(G.pick&&(G.pick.g1||G.pick.g2))runPicks();
+  else advance();
+}
+
 /* ── 표시 유틸 ── */
 const _avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length*10)/10:0;
 const _q=(a,f)=>a.length?a.slice().sort((x,y)=>x-y)[Math.min(a.length-1,Math.floor(a.length*f))]:0;
@@ -74,7 +92,8 @@ function runBalanceTest(n){
         const a=G.p.age;
         (R_.salaryByAge[a]=R_.salaryByAge[a]||[]).push(G.p.money.salary);
       }
-      if(G.ui&&G.ui.choices)choose(Math.floor(Math.random()*G.ui.choices.length));
+      if(G.ui&&G.ui.groups)autoAct();
+      else if(G.ui&&G.ui.choices)choose(Math.floor(Math.random()*G.ui.choices.length));
       else advance();
     }
 
@@ -220,7 +239,8 @@ function runBalanceTest(n){
   console.log(`  한 번도 안 심긴 플래그 ${dead.length}종${dead.length?': '+dead.join(', '):''}`);
 
   sec('특성 / 별명');
-  /* 상한 50% — v2.1 원본도 '연습벌레' 41.7% 였고, 주간에서는 훈련 횟수 자체가 늘어난다. */
+  /* 상한 50% — v2.1 원본도 '연습벌레' 41.7% 였다.
+     v3.6에서 그룹1에 훈련이 항상 들어가며 훈련 횟수가 늘어, 진화 조건을 16→26으로 올려 맞췄다. */
   console.log(`  ${_judge('특성 최다 보유율',Math.max(..._Object_vals(R_.traits).concat([0])) / n * 100 | 0,0,50,'%')}`);
   console.log(`  ${_dist(R_.traits,n,8)}`);
   console.log(`  별명: ${_dist(R_.nicks,n,6)}`);
@@ -257,7 +277,8 @@ function testProspect(n){
       G.p=forced;
       let g=0;
       while(G.screen==='game'&&g++<8000){
-        if(G.ui&&G.ui.choices)choose(Math.floor(Math.random()*G.ui.choices.length));else advance();
+        if(G.ui&&G.ui.groups)autoAct();
+        else if(G.ui&&G.ui.choices)choose(Math.floor(Math.random()*G.ui.choices.length));else advance();
       }
       war.push(G.p.tot.war);seasons.push(G.p.seasonsPlayed);mvp.push(G.p.awards.mvp);
       end[G.p.ending.title]=(end[G.p.ending.title]||0)+1;
@@ -305,7 +326,8 @@ function checkPositions(rounds){
           ...((u.choices||[]).flatMap(c=>[c.t,c.s,c.gain,c.cost]))]
           .filter(x=>typeof x==='string').join(' | ');
         BAD[pos].forEach(w=>{ if(txt.includes(w))hits.push(`[${pos}] "${w}" — ${u.title}`); });
-        if(G.ui&&G.ui.choices)choose(Math.floor(Math.random()*G.ui.choices.length));else advance();
+        if(G.ui&&G.ui.groups)autoAct();
+        else if(G.ui&&G.ui.choices)choose(Math.floor(Math.random()*G.ui.choices.length));else advance();
       }
     }
   }

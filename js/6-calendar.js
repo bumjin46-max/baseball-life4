@@ -8,6 +8,7 @@
    [40] STATE — 전역 상태 (구 [13])
    ========================================================================== */
 const G={screen:'title',p:null,ui:null,hof:[],tab:'main',hasSave:false,tq:[],
+         pick:{g1:null,g2:null},picking:0,pickPrefix:'',
          cal:{year:2026,month:0,week:0,queue:[],last:null}};
 const app=()=>document.getElementById('app');
 
@@ -131,6 +132,7 @@ function runPhase(ph){
     p.month=m.m;
     G.cal.week=0;p.week=0;
     p.monthLog=[];p.monthAcc={ip:0,er:0,ab:0,h:0};
+    relDrift(p);                                     // v3.7 — 관계는 놔두면 식는다
     if(!m.season){                                   // 비시즌엔 몸이 조금 회복된다
       p.fatigue=clamp(p.fatigue-3,0,100);
       p.stress=clamp((p.stress||20)-2,0,100);
@@ -464,13 +466,15 @@ const ACTIONS={
 
   push:{icon:'🔥',name:'감독에게 출전을 요청',gain:'출전 기회 · 투혼',cost:'부상 위험 · 관계 악화 가능',
     reveal:'FULL',
+    /* v3.7 — 감독이 받아주느냐는 운이 아니라 신뢰다 */
+    check:{k:'manager',need:61,band:13},
     outcomes:[
-      {p:.60,label:'감독이 받아들인다',bias:{competitive:1,social:.5},
+      {ok:1,label:'감독이 받아들인다',
         res:{text:'"그래, 나가라." 그는 라인업에 이름을 올렸다.',
              rel:{manager:3},clutch:4,tend:{competitive:4}}},
-      {p:.30,label:'불쾌하게 생각한다',bias:{social:-.6},
+      {p:.75,label:'불쾌하게 생각한다',
         res:{text:'"몸이 먼저다." 감독의 표정이 굳었다.',rel:{manager:-4}}},
-      {p:.10,label:'무리가 탈이 난다',
+      {p:.25,label:'무리가 탈이 난다',
         res:{text:'무릎이 말을 듣지 않았다.',injRisk:.9,fatigue:12}}]},
 
   /* ── 슬럼프 탈출 3종 (요구 22) — 확률과 대가가 서로 다르다 ── */
@@ -724,18 +728,37 @@ function monthActions(p){
   return list;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   v3.6 — 한 주에 두 번 움직인다
+   그룹1 "몸을 어디에 쓸까"  — 훈련 · 휴식 · 경기 집중 · 재활 · 기록 도전 …
+   그룹2 "그 밖의 시간"      — 관계 · 취미 · 광고 · 후배 지도 · 돈 쓰는 것 …
+   두 그룹은 각자 한 칸씩 따로 센다. 같은 화면에서 하나씩 고르고 확정한다.
+   ══════════════════════════════════════════════════════════════════════════ */
+const ACT_GROUP={
+  teamTrain:1, soloTrain:1, focus:1, rest:1, push:1, rehab:1,
+  slumpHard:1, slumpRest:1, chase:1, eyeCatch:1,
+  hobby:2, relation:2, slumpCoach:2, trainer:2, gear:2,
+  mentor:2, bodyCare:2, coachStudy:2, adShoot:2
+};
+function actChoice(id){
+  const p=G.p,a=ACTIONS[id];
+  return {id,t:`${a.icon} ${a.name}`,gain:txt(a.gain,p),cost:txt(a.cost,p),
+    reveal:a.reveal,check:a.check,outcomes:a.outcomes,
+    next:a.menu===1?(()=>trainMenu()):a.menu===2?(()=>hobbyMenu()):a.menu===3?(()=>relationMenu()):null,
+    run:a.run?(()=>{const log=a.run(p);updateCond(p);return log;}):null};
+}
 function actionMenu(){
-  const p=G.p,m=MON();
+  const p=G.p;
+  G.picking=0;G.pickPrefix='';                 // 하위 메뉴에서 돌아온 경우 예약 모드를 푼다
+  if(!G.pick)G.pick={g1:null,g2:null};
   const ids=monthActions(p);
-  return scene({when:nowLabel(),title:weekly()?'이번 주 무엇을 할까':'이번 달 무엇을 할까',
+  const g1=ids.filter(id=>(ACT_GROUP[id]||1)===1).map(actChoice);
+  const g2=ids.filter(id=>ACT_GROUP[id]===2).map(actChoice);
+  const wk=weekly();
+  return scene({when:nowLabel(),title:wk?'이번 주 무엇을 할까':'이번 달 무엇을 할까',
     body:bodyHint(p),month:1,
-    choices:ids.map(id=>{
-      const a=ACTIONS[id];
-      return {t:`${a.icon} ${a.name}`,gain:txt(a.gain,p),cost:txt(a.cost,p),
-        reveal:a.reveal,outcomes:a.outcomes,
-        next:a.menu===1?(()=>trainMenu()):a.menu===2?(()=>hobbyMenu()):a.menu===3?(()=>relationMenu()):null,
-        run:a.run?(()=>{const log=a.run(p);updateCond(p);return log;}):null};
-    })});
+    groups:[{key:1,label:wk?'몸을 어디에 쓸까':'이 달, 몸을 어디에 쓸까',choices:g1},
+            {key:2,label:'그 밖의 시간',choices:g2}]});
 }
 
 function hobbyMenu(){

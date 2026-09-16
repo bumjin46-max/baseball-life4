@@ -234,9 +234,10 @@ EV({id:'CB_HURT',once:1,w:10,when:p=>yearsSince(p,'playedHurt')>=5&&p.age>=29,
  title:'그때의 청구서',
  text:p=>`${flagYear(p,'playedHurt')}년 그 3연전.\n의사가 사진을 가리킨다. "이거, 그때 무리한 자립니다."`,
  choices:[
-  {t:'수술을 받는다',risk:'RISK',reveal:'FULL',outcomes:[
-    {p:.62,label:'완전히 회복한다',res:{text:'반년을 잃고 몸을 되찾았다.',stKey:[1.5,1.0],fatigue:-20}},
-    {p:.38,label:'예전 같지 않다',res:{text:'수술은 성공했지만 그 감각은 돌아오지 않았다.',
+  {t:'수술을 받는다',risk:'RISK',reveal:'FULL',
+   check:{k:'stamina',need:65,band:15},outcomes:[
+    {ok:1,label:'완전히 회복한다',res:{text:'반년을 잃고 몸을 되찾았다.',stKey:[1.5,1.0],fatigue:-20}},
+    {label:'예전 같지 않다',res:{text:'수술은 성공했지만 그 감각은 돌아오지 않았다.',
       st:{stamina:-3},tend:{patience:6}}}
   ]},
   {t:'버티고 뛴다',s:'출전 유지 / 노쇠 가속',run:p=>{
@@ -354,8 +355,9 @@ EV({id:'CB_MEDIA',once:1,w:8,when:p=>p.media>=70&&p.fame>=45&&!p.flags.includes(
  title:'오보',
  text:p=>`사실과 다른 기사가 났다.\n댓글은 이미 수천 개다.`,
  choices:[
-  {t:'공개적으로 반박한다',risk:'RISK',reveal:'FULL',outcomes:[
-    {p:.45,label:'여론이 돌아선다',bias:{star:.8},
+  {t:'공개적으로 반박한다',risk:'RISK',reveal:'FULL',
+   check:{k:'mental',need:86,band:14},outcomes:[
+    {ok:1,label:'여론이 돌아선다',
      res:{fan:10,media:6,text:'사과 기사가 났다.',flag:'wonThemBack'}},
     {p:.55,label:'싸움만 커진다',
      res:{fan:-10,media:12,text:'기사보다 반박이 더 오래 회자됐다.',flag:'mediaConflict'}}
@@ -578,8 +580,9 @@ EV({id:'TE_SEOUL_3',team:'seoul',w:6,when:p=>p.seasonsPlayed>=3&&p.lv!=='2군',
     {p:.70,label:'담담한 태도가 좋게 읽힌다',res:{rel:{front:8,team:5},text:'기사 제목이 점잖게 나갔다.'}},
     {p:.30,label:'패기가 없다는 평',res:{rel:{fan:-5},text:'"너무 얌전한 거 아니냐"는 말이 돌았다.'}}
   ]},
-  {t:'"제 자리는 제가 지킵니다."',risk:'RISK',reveal:'FULL',outcomes:[
-    {p:.55,label:'팬들이 반응한다',bias:{competitive:1},
+  {t:'"제 자리는 제가 지킵니다."',risk:'RISK',reveal:'FULL',
+   check:{k:'ovr',need:71,band:11},outcomes:[
+    {ok:1,label:'팬들이 반응한다',
      res:{fan:7,media:8,clutch:3,tend:{competitive:8},text:'그 한 마디가 헤드라인이 됐다.'}},
     {p:.45,label:'건방지다는 말이 돈다',res:{rel:{vet:-10,team:-6},text:'라커룸이 조용해졌다.'}}
   ]}
@@ -630,8 +633,9 @@ EV({id:'TE_DAEJEON_2',team:'daejeon',w:7,when:p=>p.lv==='2군'&&p.age<=24,
  title:'실패해도 된다',
  text:p=>`2군 감독이 노트를 덮는다.\n"여기서는 실패해도 돼. 대신 똑같은 실패를 두 번 하면 안 돼."`,
  choices:[
-  {t:'약점을 정면으로 파고든다',risk:'RISK',reveal:'FULL',outcomes:[
-    {p:.55,label:'약점이 눈에 띄게 줄어든다',bias:{diligence:1,patience:.6},
+  {t:'약점을 정면으로 파고든다',risk:'RISK',reveal:'FULL',
+   check:{k:'mental',need:50,band:14},outcomes:[
+    {ok:1,label:'약점이 눈에 띄게 줄어든다',
      res:{stKey:[3.2,1.8],rel:{coach:10},text:'두 달 만에 다른 선수가 됐다.'}},
     {p:.45,label:'아직은 몸이 따라오지 않는다',
      res:{fatigue:10,tend:{patience:5},text:'조급해하지 않기로 했다.'}}
@@ -845,10 +849,11 @@ EV({id:'V_PUSH',w:7,when:p=>p.fatigue>=50&&p.lv!=='2군',
  title:'감독이 부른다',
  text:p=>`"내일도 나갈 수 있지?"\n\n${bodyHint(p)}`,
  choices:[
-  {t:'"괜찮습니다. 나가겠습니다."',risk:'HIGH_RISK',reveal:'PARTIAL',outcomes:[
-    {p:.45,label:'결정적인 활약',res:{clutch:4,rel:{manager:10},fan:3,fatigue:12,text:'그날 경기, 그가 팀을 구했다.'},bias:{competitive:.8}},
-    {p:.35,label:'평범한 경기 · 피로 누적',res:{fatigue:18,rel:{manager:3},text:'몸이 무거웠지만 티는 내지 않았다.'}},
-    {p:.20,label:'몸에 이상 신호',res:{fatigue:22,injRisk:.45,flag:'playedHurt',text:'3회부터 통증이 왔다. 아무에게도 말하지 않았다.'},bias:{mental:-.5}}
+  {t:'"괜찮습니다. 나가겠습니다."',risk:'HIGH_RISK',reveal:'PARTIAL',
+   check:{k:'stamina',need:66,band:15},outcomes:[
+    {ok:1,label:'결정적인 활약',res:{clutch:4,rel:{manager:10},fan:3,fatigue:12,text:'그날 경기, 그가 팀을 구했다.'}},
+    {p:.64,label:'평범한 경기 · 피로 누적',res:{fatigue:18,rel:{manager:3},text:'몸이 무거웠지만 티는 내지 않았다.'}},
+    {p:.36,label:'몸에 이상 신호',res:{fatigue:22,injRisk:.45,flag:'playedHurt',text:'3회부터 통증이 왔다. 아무에게도 말하지 않았다.'}}
   ]},
   {t:'"하루만 쉬겠습니다."',risk:'SAFE',reveal:'FULL',outcomes:[
     {p:.70,label:'컨디션 회복',res:{fatigue:-22,cond:1,text:'하루가 몸을 바꿔놓았다.'}},
@@ -886,10 +891,11 @@ EV({id:'V_COACH',w:6,when:p=>p.year>=2027,
  title:'코치의 제안',
  text:p=>`${W(p).coach}가 ${W(p).craft}을 손보자고 한다.\n"두 달만 참으면 완전히 달라질 거다. 대신 그동안은 성적이 떨어질 수 있어."`,
  choices:[
-  {t:'두 달을 투자한다',risk:'RISK',reveal:'FULL',outcomes:[
-    {p:.55,label:'핵심 능력 큰 성장',res:{stKey:[3.5,2.2],rel:{coach:15},text:'두 달 뒤, 몸이 다르게 움직이기 시작했다.'},bias:{diligence:.9}},
-    {p:.30,label:'성장은 미미 · 감각 혼란',res:{rel:{coach:5},text:'몸에 붙지 않았다.'}},
-    {p:.15,label:'완전히 무너진 밸런스',res:{st:{mental:-2},rel:{coach:-8},text:'원래 폼으로도 돌아가지 못했다.'}}
+  {t:'두 달을 투자한다',risk:'RISK',reveal:'FULL',
+   check:{k:'diligence',need:78,band:14},outcomes:[
+    {ok:1,label:'핵심 능력 큰 성장',res:{stKey:[3.5,2.2],rel:{coach:15},text:'두 달 뒤, 몸이 다르게 움직이기 시작했다.'}},
+    {p:.67,label:'성장은 미미 · 감각 혼란',res:{rel:{coach:5},text:'몸에 붙지 않았다.'}},
+    {p:.33,label:'완전히 무너진 밸런스',res:{st:{mental:-2},rel:{coach:-8},text:'원래 폼으로도 돌아가지 못했다.'}}
   ]},
   {t:'지금 방식을 유지한다',risk:'SAFE',reveal:'PARTIAL',outcomes:[
     {p:.75,label:'안정적인 시즌',res:{st:{mental:1},text:'익숙한 것을 지켰다.'}},
@@ -900,8 +906,9 @@ EV({id:'V_FRONT',w:5,when:p=>p.seasonsPlayed>=3,
  title:'연봉 협상',
  text:p=>`구단 사무실. 제시된 금액은 기대에 못 미친다.`,
  choices:[
-  {t:'강하게 요구한다',risk:'RISK',reveal:'PARTIAL',outcomes:[
-    {p:.45,label:'요구 관철',res:{rel:{front:6},tend:{star:6},fame:4,text:'구단이 한발 물러섰다.'},bias:{selfish:.8}},
+  {t:'강하게 요구한다',risk:'RISK',reveal:'PARTIAL',
+   check:{k:'front',need:65,band:13},outcomes:[
+    {ok:1,label:'요구 관철',res:{rel:{front:6},tend:{star:6},fame:4,text:'구단이 한발 물러섰다.'}},
     {p:.55,label:'협상 결렬 · 감정 상함',res:{rel:{front:-14},flag:'wantOut',text:'"이 선수, 팀보다 돈이네."'}}
   ]},
   {t:'구단 제시안을 받아들인다',risk:'SAFE',reveal:'FULL',outcomes:[
@@ -913,8 +920,9 @@ EV({id:'V_MINOR',w:9,when:p=>p.lv==='2군',
  title:'2군의 성적표',
  text:p=>`2군에서는 할 만하다. 문제는 아무도 보지 않는다는 것이다.\n감독대행이 묻는다. "위에 올라갈 준비, 됐냐?"`,
  choices:[
-  {t:'"지금 당장 올려주십시오."',risk:'HIGH_RISK',reveal:'HIDDEN',outcomes:[
-    {p:.40,label:'콜업 성공',res:{rel:{manager:10},tend:{competitive:8},clutch:3,text:'다음 주, 1군 등록 통보를 받았다.'},bias:{competitive:.9}},
+  {t:'"지금 당장 올려주십시오."',risk:'HIGH_RISK',reveal:'PARTIAL',
+   check:{k:'ovr',need:54,band:10},outcomes:[
+    {ok:1,label:'콜업 성공',res:{rel:{manager:10},tend:{competitive:8},clutch:3,text:'다음 주, 1군 등록 통보를 받았다.'}},
     {p:.60,label:'아직 이르다는 평가',res:{rel:{manager:-5},tend:{patience:4},text:'"조금만 더 있어라." 익숙한 말이었다.'}}
   ]},
   {t:'"조금 더 준비하겠습니다."',risk:'SAFE',reveal:'FULL',outcomes:[
