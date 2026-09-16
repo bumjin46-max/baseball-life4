@@ -5,7 +5,7 @@
 "use strict";
 
 /* 빌드 표기 — 타이틀 화면 하단 buildbar에서 사용한다. */
-const BUILD="v3.4";
+const BUILD="v3.5";
 const BUILD_DATE="2026-09-16";
 
 /* ==========================================================================
@@ -567,12 +567,14 @@ function mobileTabBody(p){
   const t=G.tab;
   if(t==='profile')
     return `<div class="panel">${profileTab(p,true)}</div>`
+      + condPanel(p)                       /* v3.5 — 상단에서 내려온 몸 상태 게이지 */
       + statPanel(p,true) + traitPanel(p) + relPanel(p,true)
       + `<div class="panel">
           <div class="grp" style="margin-top:0">성장 그래프</div>${growthGraph(p)}
           <div class="grp">계약 / 연봉</div>${contractPanel(p)}
           <div class="grp">라이벌</div>${rivalPanel(p)}</div>`;
-  const body = t==='game'   ? tabGame(p)
+  /* v3.5 — 구단 목표와 이번 시즌 성적은 경기 탭 맨 위로 */
+  const body = t==='game'   ? statusPanel(p)+tabGame(p)
              : t==='league' ? tabLeague(p)
              : t==='rec'    ? tabRecord(p)
              : t==='hist'   ? tabHistory(p)
@@ -611,6 +613,29 @@ function boardHtml(p){
   const sl=(p.slump&&p.slump.active)
     ?`<span class="tagx">슬럼프${p.slump.months>1?` ${p.slump.months}개월`:''}</span>`:'';
   const mny=p.money||{balance:0,salary:0};
+
+  /* v3.5 — 모바일 상단은 "지금 누구이고 몸이 어떤가"만 남긴다.
+     v3.4까지 게이지 8개 + 시즌 성적 + 구단 목표가 다 올라가 화면의 47%를 먹었다.
+     나머지 숫자는 각자 자기 탭으로 보냈다 (선수=몸 상태·계약 / 경기=목표·시즌 성적). */
+  if(typeof isMobileView==='function'&&isMobileView()){
+    const fat=Math.round(p.fatigue);
+    return `<div class="lifeboard slim">
+      <div class="lb-top">
+        <div class="lb-date"><b>${G.cal?G.cal.year:p.year}년 ${m.label}</b>
+          <span class="dim">${m.note||''}</span></div>
+        <div class="lb-team">${p.age}세 · <b class="who">${esc(p.name)}</b>
+          <span class="dim">${TEAM(p.team).short}</span>
+          <span class="tag">${lv==='2군'?'2군':lv}</span>${st}${sl}</div>
+      </div>
+      <div class="lb-fat">
+        <span class="gl">피로도</span>
+        <span class="gb"><i class="${fat>70?'bad':fat<35?'good':''}" style="width:${clamp(fat,0,100)}%"></i></span>
+        <span class="gv">${fat}</span>
+        <span class="face c${p.cond}">${COND_FACE[p.cond]}</span>
+      </div>
+    </div>`;
+  }
+
   return `<div class="lifeboard ${G.compact?'compact':''}">
     <button class="lb-fold" onclick="toggleBoard()" aria-label="상태창 접기/펼치기">${G.compact?'▾':'▴'}</button>
     <div class="lb-top">
@@ -645,6 +670,54 @@ function boardHtml(p){
       ${p.goalMiss>=2?`<span class="tagx">${p.goalMiss}년 연속 미달</span>`:''}</div>`:''}
     ${recent.length?`<div class="lb-recent">${recent.map(r=>`<div>· ${esc(String(r).replace(/<[^>]+>/g,''))}</div>`).join('')}</div>`:''}
   </div>`;
+}
+/* v3.5 — 상단 상태창에서 내려온 것들.
+   condPanel = 몸/인기 게이지(선수 탭), statusPanel = 구단 목표·이번 시즌(경기 탭) */
+function condPanel(p){
+  const mny=p.money||{balance:0,salary:0};
+  const g=(l,v,max,tone,txt)=>`<div class="g"><span class="gl">${l}</span>
+    <span class="gb"><i class="${tone||''}" style="width:${clamp(v/max*100,0,100)}%"></i></span>
+    <span class="gv">${txt||Math.round(v)}</span></div>`;
+  return `<div class="panel"><h3>몸 상태 · 평판</h3>
+    <div class="lb-g" style="padding:0;border:none;grid-template-columns:1fr">
+      <div class="g"><span class="gl">컨디션</span>
+        <span class="face c${p.cond}">${COND_FACE[p.cond]}</span>
+        <span class="gv" style="min-width:auto;text-align:left;flex:1">${COND_NAME[p.cond]}</span></div>
+      ${g('체력',p.st.stamina||0,100)}
+      ${g('피로도',p.fatigue,100,p.fatigue>70?'bad':'')}
+      ${g('스트레스',p.stress||0,100,(p.stress||0)>65?'bad':'')}
+      ${g('팬 인기',p.fanRating,100,'good')}
+      ${g('언론',p.media||50,100)}
+    </div>
+    <div class="rule"></div>
+    <div class="sm"><span class="dim">자산</span> <b>${wonText(mny.balance)}</b>
+      &nbsp;·&nbsp; <span class="dim">연봉</span> <b>${wonText(mny.salary)}</b>
+      &nbsp;·&nbsp; <span class="dim">종합</span> <b class="num">${ovr(p)}</b></div>
+    <div class="sm dim" style="margin-top:6px">${esc(bodyHint(p))}</div>
+  </div>`;
+}
+function statusPanel(p){
+  const s=p.season, f=p.farm, m=(typeof MON==='function'&&G.cal)?MON():{season:false};
+  const w=(s&&s.g)?round(warNow(p)||0,1):0;
+  const line=s&&s.g?(p.pos==='pitcher'
+      ? [[s.w+'승',''],[s.l+'패',''],[s.ip?round(s.er*9/s.ip,2):'-','ERA'],[s.k,'K'],[w,'WAR']]
+      : [[s.ab?avg3(s.h/s.ab):'-','타율'],[s.hr,'홈런'],[s.rbi,'타점'],[s.sb,'도루'],[w,'WAR']]):null;
+  const farmLine=(p.lv==='2군'&&f&&f.g)?(p.pos==='pitcher'
+      ? [[f.w+'승',''],[f.ip,'이닝'],[f.ip?round(f.er*9/f.ip,2):'-','ERA'],[f.k,'K']]
+      : [[f.ab?avg3(f.h/f.ab):'-','타율'],[f.hr,'홈런'],[f.rbi,'타점'],[f.g,'경기']]):null;
+  const recent=(p.monthLog||[]).slice(-3);
+  return `${p.goal?`<div class="lb-goal" style="border:none;padding:0 0 10px">
+      <span class="lbl">구단 목표</span><span class="gv">${esc(goalText(p))}</span>
+      <span class="${!goalRated(p)?'dim':goalMet(p)?'up':'down'}">${!goalRated(p)?'집계 전':goalMet(p)?'달성':'미달'}</span>
+      ${p.goalMiss>=2?`<span class="tagx">${p.goalMiss}년 연속 미달</span>`:''}</div>`:''}
+    ${farmLine?`<div class="lb-season farm" style="padding:0 0 8px"><span class="lbl">${p.year} 2군</span>
+      ${farmLine.map(([v,l])=>`<span class="st"><b>${v}</b>${l?`<i>${l}</i>`:''}</span>`).join('')}</div>`:''}
+    ${line?`<div class="lb-season" style="padding:0 0 8px"><span class="lbl">${p.year} 1군</span>
+      ${line.map(([v,l])=>`<span class="st"><b>${v}</b>${l?`<i>${l}</i>`:''}</span>`).join('')}</div>`:
+      (farmLine?'':`<div class="lb-season" style="padding:0 0 8px"><span class="lbl">${m.season?'시즌 준비':'비시즌'}</span></div>`)}
+    ${recent.length?`<div class="grp">최근</div>
+      <div class="sm dim" style="display:grid;gap:3px">${recent.map(r=>
+        `<div>· ${esc(String(r).replace(/<[^>]+>/g,''))}</div>`).join('')}</div>`:''}`;
 }
 /* ── 능력치 패널 (그룹 + 바) ── */
 const STAT_GROUP={
