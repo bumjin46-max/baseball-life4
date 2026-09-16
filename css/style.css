@@ -446,3 +446,11 @@ table.rec tr.farm td{color:var(--chalk-dim);font-style:italic}
 .race .rb i{display:block;height:100%;background:var(--lamp)}
 .race .rb.alt i{background:var(--red)}
 .race b{font-family:var(--digit);font-size:15px;min-width:26px;text-align:right}
+
+/* 타이틀 화면 빌드 표기 */
+.buildbar{display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:18px;font-size:11px;letter-spacing:.02em;opacity:.75}
+.buildbar .buildtag{padding:2px 7px;border:1px solid rgba(255,255,255,.18);
+  border-radius:999px;font-weight:700}
+.buildbar a{color:inherit;opacity:.7;text-decoration:underline}
+.buildbar a:hover{opacity:1}
