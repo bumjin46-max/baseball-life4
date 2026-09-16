@@ -5,7 +5,7 @@
 "use strict";
 
 /* 빌드 표기 — 타이틀 화면 하단 buildbar에서 사용한다. */
-const BUILD="v3.1";
+const BUILD="v3.2";
 const BUILD_DATE="2026-09-16";
 
 /* ==========================================================================
@@ -305,6 +305,14 @@ try{
   window.addEventListener('pagehide',()=>{saveFlush();});
 }catch(e){}
 
+/* v3.2 — 모바일/데스크톱 레이아웃은 JS가 고르므로, 경계를 넘으면 다시 그려야 한다. */
+try{
+  const mq=window.matchMedia('(max-width:940px)');
+  const redraw=()=>{if(G.screen)render();};
+  if(mq.addEventListener)mq.addEventListener('change',redraw);
+  else if(mq.addListener)mq.addListener(redraw);
+}catch(e){}
+
 (async function boot(){
   if(!bootCheck())return;
   G.hof=(await Store.get('hof_v1'))||[];
@@ -525,8 +533,22 @@ function viewCreate(){
   </div>`;
 }
 /* ── 게임 본 화면 ── */
+/* v3.2 — 모바일 여부. 레이아웃이 CSS(max-width:940px)와 어긋나면 안 되므로
+   같은 기준을 JS에서도 그대로 쓴다. */
+function isMobileView(){
+  try{return window.matchMedia('(max-width:940px)').matches;}catch(e){return false;}
+}
 function viewGame(){
   const p=G.p,u=G.ui||{};
+  /* v3.2 — 모바일은 "한 탭에 그 탭 내용만".
+     기존 구조는 데스크톱 3단(좌 능력치 / 중앙 씬 / 우 특성·관계)을 그대로 두고
+     .side 를 profile 탭에서 다시 보여줬기 때문에, 선수 탭에서
+     ① 상단 상태창 ② 사이드 패널 ③ infoTabs 의 선수 카드가 겹쳐 나왔다.
+     또 씬(이번 달 무엇을 할까)이 main 에 항상 들어 있어 모든 탭에 따라다녔다. */
+  if(isMobileView()){
+    const body=(G.tab==='main')?sceneHtml(u):mobileTabBody(p);
+    return `${boardHtml(p)}<div class="stage"><div class="main">${body}</div></div>`;
+  }
   /* 요구 1 — 선택을 기다리는 화면(이벤트·행동 메뉴 등)은 그 선택만 보여준다.
      다른 탭의 정보가 아래에 섞여 들어오면 "지금 뭘 골라야 하는지"가 흐려진다.
      선택이 없는 결과/휴식 화면에서만 탭 정보를 이어 붙인다. */
@@ -535,6 +557,24 @@ function viewGame(){
   const side2=`<div class="side ${G.tab==='profile'?'show':''}">${traitPanel(p)}${relPanel(p)}</div>`;
   const main=`<div class="main">${sceneHtml(u)}${deciding?'':infoTabs(p)}</div>`;
   return `${boardHtml(p)}<div class="stage">${side1}${main}${side2}</div>`;
+}
+/* v3.2 — 모바일 탭 본문. 각 탭은 자기 내용만 책임진다.
+   statPanel / traitPanel / relPanel 은 스스로 .panel 을 감싸므로 그대로 이어 붙인다. */
+function mobileTabBody(p){
+  const t=G.tab;
+  if(t==='profile')
+    return `<div class="panel">${profileTab(p,true)}</div>`
+      + statPanel(p,true) + traitPanel(p) + relPanel(p,true)
+      + `<div class="panel">
+          <div class="grp" style="margin-top:0">성장 그래프</div>${growthGraph(p)}
+          <div class="grp">계약 / 연봉</div>${contractPanel(p)}
+          <div class="grp">라이벌</div>${rivalPanel(p)}</div>`;
+  const body = t==='game'   ? tabGame(p)
+             : t==='league' ? tabLeague(p)
+             : t==='rec'    ? tabRecord(p)
+             : t==='hist'   ? tabHistory(p)
+             : tabGame(p);
+  return `<div class="panel">${body}</div>`;
 }
 /* ──────────────────────────────────────────────────────────────
    v3.0 메인 보드 — "내 인생을 관리하는 화면"
@@ -605,7 +645,7 @@ const STAT_GROUP={
   pitcher:[['구위',['velo','stuff','breaking']],['제구',['control','crisis']],['기본',['stamina','mental','recovery']]],
   catcher:[['타격',['contact','power','eye']],['포수',['catching','blocking','lead','throw']],['기본',['defense','mental','stamina']]]
 };
-function statPanel(p){
+function statPanel(p,slim){
   const tier=p.pot>=90?'특급':p.pot>=80?'높음':p.pot>=68?'보통':'낮음';
   const bar=k=>{
     const v=p.st[k],b=tEff(p,k==='control'?'ctrl':k);
@@ -615,12 +655,12 @@ function statPanel(p){
       <div class="bar"><i class="${v>=85?'hi':v<45?'lo':''}" style="width:${clamp(v,0,100)}%"></i></div></div>`;
   };
   return `<div class="panel">
-    <h3>능력치 · 종합 ${ovr(p)}</h3>
+    <h3>${slim?'능력치':`능력치 · 종합 ${ovr(p)}`}</h3>
     ${STAT_GROUP[p.pos].map(([g,ks])=>`<div class="grp">${g}</div>${ks.filter(k=>p.st[k]!==undefined).map(bar).join('')}`).join('')}
-    <div class="grp">컨디션</div>
+    ${slim?'':`<div class="grp">컨디션</div>
     <div class="stat"><div class="row"><span>잠재력</span><span style="color:var(--lamp);font-weight:700">${tier}</span></div></div>
     <div class="stat"><div class="row"><span>피로도</span><span class="v">${Math.round(p.fatigue)}</span></div>
-      <div class="bar"><i style="width:${p.fatigue}%;background:${p.fatigue>70?'var(--red)':'var(--clay)'}"></i></div></div>
+      <div class="bar"><i style="width:${p.fatigue}%;background:${p.fatigue>70?'var(--red)':'var(--clay)'}"></i></div></div>`}
     <div class="sm dim" style="margin-top:6px">${esc(bodyHint(p))}</div>
   </div>`;
 }
@@ -636,7 +676,7 @@ function traitPanel(p){
         <div class="tn">${t.id}</div><div class="td">${t.desc}</div></div>`;
     }).join('')}</div></div>`;
 }
-function relPanel(p){
+function relPanel(p,slim){
   const rv=p.rival;
   const bond=rv.bond>=75?'가장 가까운 친구':rv.bond>=58?'선의의 경쟁자':rv.bond>=40?'경쟁자':rv.bond>=25?'견제 관계':'악연';
   /* 관계는 숫자가 아니라 단계로 읽힌다 (요구 23) */
@@ -652,9 +692,9 @@ function relPanel(p){
       ${row('동료',p.rel.team)}${row('주장',p.rel.captain)}
       ${row('프런트',p.rel.front)}${row('팬',p.rel.fan)}
     </div>
-    <div class="grp">라이벌</div>
+    ${slim?'':`<div class="grp">라이벌</div>
     <div class="sm"><b>${esc(rv.name)}</b> <span class="dim">· ${bond}</span>
-      <div class="dim">통산 WAR ${rv.totWar}${rv.retired?' · 은퇴':''}</div></div>
+      <div class="dim">통산 WAR ${rv.totWar}${rv.retired?' · 은퇴':''}</div></div>`}
     ${c?`<div class="grp">주전 경쟁</div><div class="sm">${esc(c.name)} <span class="dim">종합 ${c.ovr}</span>
       <div class="${ovr(p)>=c.ovr?'up':'down'}">${ovr(p)>=c.ovr?'내가 앞서 있다':'아직 뒤처져 있다'} (나 ${ovr(p)})</div></div>`:''}
     <div class="grp">팬 · 언론</div>
@@ -855,9 +895,19 @@ function storyTab(p){
         `<div><b>${c.y}.${String(c.m||1).padStart(2,'0')}</b><span>${esc(c.t)}</span></div>`).join('')}</div>`:''}
     `;
 }
-function profileTab(p){
+function profileTab(p,slim){
   const s=p.season;
   const gr=PROSPECT.find(x=>x.id===p.grade)||PROSPECT[0];
+  /* v3.2 — slim(모바일): 이름·나이·팀·포지션·종합은 이미 상단 상태창에 있다.
+     같은 정보를 카드로 한 번 더 그리지 않고, 거기에 없는 것만 남긴다. */
+  if(slim) return `<h3>선수 등급</h3>
+    <div><span class="pill hi">잠재력 ${p.pot>=90?'특급':p.pot>=80?'높음':p.pot>=68?'보통':'낮음'}</span>
+      ${p.grade&&p.grade!=='normal'?`<span class="pill" style="color:var(--purple);border-color:rgba(181,138,214,.55)">${gr.label}</span>`:''}</div>
+    <div class="sm dim" style="margin-top:6px">${esc(gr.desc)}</div>
+    ${s&&s.g?`<div class="sm dim" style="margin-top:8px">${p.year} · ${p.pos==='pitcher'
+      ?`${s.w}승 ${s.l}패 ERA ${s.ip?round(s.er*9/s.ip,2):'-'}`
+      :`타율 ${s.ab?avg3(s.h/s.ab):'-'} ${s.hr}홈런 ${s.rbi}타점`}</div>`:''}
+    <div class="grp">커리어 WAR 추이</div>${sparkHtml(p)}`;
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
       <div class="pcard">
         <div class="ball">${p.pos==='pitcher'?'⚾':p.pos==='catcher'?'🧤':'🏏'}</div>
