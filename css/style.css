@@ -521,3 +521,21 @@ table.rec tr.farm td{color:var(--chalk-dim);font-style:italic}
 .chk.mid .ckv{color:var(--lamp)}
 .chk.no .ckv{color:var(--red)}
 .chk.no .ck b{color:var(--red)}
+
+/* v3.8 — 자동 진행 */
+.lb-auto{position:absolute;top:4px;right:4px;z-index:3;width:42px;height:38px;
+  background:none;border:none;color:var(--chalk-dim);font-size:14px;border-radius:6px;line-height:1}
+.lb-auto.on{color:var(--lamp)}
+.lb-auto:active{background:rgba(255,255,255,.08)}
+.lifeboard.slim{position:sticky;top:env(safe-area-inset-top,0px)}
+.lifeboard.slim .lb-top{padding-right:52px}
+.lifeboard:not(.slim) .lb-auto{right:46px}
+.autobar{display:block;width:100%;margin-top:8px;text-align:center;padding:12px;
+  border:1px dashed var(--line2);background:none;color:var(--chalk-dim);border-radius:3px;font-weight:700}
+.autobar .dim{display:block;font-weight:400;margin-top:2px}
+.autobar:active{background:rgba(255,255,255,.06)}
+
+/* v3.8 — 엔딩의 "팬들 기억" 한 줄 */
+.memory{margin:14px auto 0;max-width:460px;padding:11px 14px;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  font-size:13.5px;line-height:1.7;color:var(--lamp);letter-spacing:-.01em}

@@ -194,7 +194,7 @@ function runBalanceTest(n){
 
   sec('27. 엔딩 분포');
   const es=Object.entries(R_.endings).sort((a,b)=>b[1]-a[1]);
-  console.log(`  ${_judge('엔딩 최다 빈도',_pct(es[0][1],n),0,30,'%')} · ${es.length}종 등장 / ${ENDINGS.length}종 중`);
+  console.log(`  ${_judge('엔딩 최다 빈도',_pct(es[0][1],n),0,30,'%')} · ${es.length}종 등장 / ${ENDINGS.length+(typeof POS_ENDINGS!=='undefined'?Object.values(POS_ENDINGS).reduce((a,b)=>a+b.length,0):0)}종 중`);
   es.forEach(([k,v])=>console.log(`    ${_pad(k,18)} ${_pad(_bar(v,n,20),20)} ${_pct(v,n)}%`));
 
   sec('29. 1군 / 2군 (플레이어)');

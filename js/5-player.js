@@ -687,6 +687,10 @@ function retireCheck(p){
   return false;
 }
 function decideEnding(p){
+  /* v3.8 — 포지션 전용 엔딩을 먼저 본다. 그 포지션에서만 나올 수 있는 모습이
+     커리어 크기만 보는 공용 엔딩보다 먼저 걸려야 한다. */
+  const pe=(typeof POS_ENDINGS!=='undefined'&&POS_ENDINGS[p.pos])||[];
+  for(const e of pe){ try{ if(e.when(p))return e; }catch(err){} }
   for(const e of ENDINGS)if(e.when(p))return e;
   return ENDINGS[ENDINGS.length-1];
 }

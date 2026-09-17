@@ -5,7 +5,7 @@
 "use strict";
 
 /* 빌드 표기 — 타이틀 화면 하단 buildbar에서 사용한다. */
-const BUILD="v3.7";
+const BUILD="v3.8";
 const BUILD_DATE="2026-09-16";
 
 /* ==========================================================================
@@ -321,6 +321,7 @@ try{
   if(!bootCheck())return;
   G.hof=(await Store.get('hof_v1'))||[];
   G.compact=!!(await Store.get('compact_v1'));
+  G.auto=(await Store.get('auto_v1'))?1:0;   // v3.8 — 자동 넘김 설정 기억
   try{await Store.del('save_v1');}catch(e){}      // v2.1 세이브 폐기
   G.hasSave=!!(await Store.get('save_v3'));
   render();
@@ -628,6 +629,8 @@ function boardHtml(p){
           <span class="dim">${TEAM(p.team).short}</span>
           <span class="tag">${lv==='2군'?'2군':lv}</span>${st}${sl}</div>
       </div>
+      <button class="lb-auto ${G.auto?'on':''}" onclick="toggleAuto()"
+        aria-label="결과 화면 자동 넘김">${G.auto?'⏩':'▷'}</button>
       <div class="lb-fat">
         <span class="gl">피로도</span>
         <span class="gb"><i class="${fat>70?'bad':fat<35?'good':''}" style="width:${clamp(fat,0,100)}%"></i></span>
@@ -639,6 +642,8 @@ function boardHtml(p){
 
   return `<div class="lifeboard ${G.compact?'compact':''}">
     <button class="lb-fold" onclick="toggleBoard()" aria-label="상태창 접기/펼치기">${G.compact?'▾':'▴'}</button>
+    <button class="lb-auto ${G.auto?'on':''}" onclick="toggleAuto()"
+      aria-label="결과 화면 자동 넘김">${G.auto?'⏩':'▷'}</button>
     <div class="lb-top">
       <div class="lb-date"><b>${G.cal?G.cal.year:p.year}년 ${m.label}</b>
         <span class="dim">${m.note||''}</span></div>
@@ -799,6 +804,7 @@ function sceneHtml(u){
         ${oddsHtml(G.p,c)}</button>`).join('')}</div>`:''}
     ${u.groups?groupsHtml(u):''}
     ${u.cta?`<button class="go" onclick="advance()">${esc(u.cta)}</button>`:''}
+    ${G.autoSeason&&!u.groups?`<button class="ghost autobar" onclick="stopAuto()">⏸ 자동 진행 중 — 멈추기</button>`:''}
   </div>`;
 }
 /* v3.6 — 두 그룹을 한 화면에 그린다. 각 그룹에서 하나씩 고르면 확정이 열린다. */
@@ -820,20 +826,50 @@ function groupsHtml(u){
   }).join('')
   +`<button class="go confirm" ${ready?'':'disabled'} onclick="runPicks()">
       ${ready?`이대로 한다 <span class="picksum">${need.map(g=>esc(G.pick['g'+g.key].label)).join(' + ')}</span>`
-             :`${need.filter(g=>!G.pick['g'+g.key]).map(g=>esc(g.label)).join(' · ')} — 아직 안 골랐다`}</button>`;
+             :`${need.filter(g=>!G.pick['g'+g.key]).map(g=>esc(g.label)).join(' · ')} — 아직 안 골랐다`}</button>`
+  /* v3.8 — 한 번 고른 뒤에는 같은 선택으로 시즌을 흘려보낼 수 있다 */
+  +(G.autoSeason
+    ? `<button class="ghost autobar" onclick="stopAuto()">⏸ 자동 진행 중 — 멈추기</button>`
+    : (G.repeat?`<button class="ghost autobar" onclick="startAutoSeason()">⏩ 이번 시즌 자동 진행
+         <span class="dim sm">직전 선택을 반복 · 이벤트에서 멈춤</span></button>`:''));
 }
 /* 그룹에서 하나를 고른다 — 하위 메뉴가 있으면 예약 모드로 들어갔다 돌아온다 */
 function pickAct(gk,i){
   const g=(G.ui.groups||[]).find(x=>x.key===gk);
   if(!g)return;
   const c=g.choices[i];
-  if(c.next){G.picking=gk;G.pickPrefix=c.t;c.next();return;}
+  if(c.next){G.picking=gk;G.pickPrefix=c.t;G.pickParent=c.id;c.next();return;}
+  G.pickParent=c.id;
   setPick(gk,c.id,c.t,c);
   render();
 }
 function setPick(gk,id,label,c){
   if(!G.pick)G.pick={g1:null,g2:null};
-  G.pick['g'+gk]={id,label,exec:()=>(c.outcomes?rollOutcome(G.p,c):(c.run?c.run():[]))||[]};
+  /* v3.8 — 시즌 자동 진행이 같은 선택을 되풀이할 수 있도록 경로(행동 id + 하위 항목)를 남긴다 */
+  G.pick['g'+gk]={id,label,act:G.pickParent||id,leaf:c.t,
+    exec:()=>(c.outcomes?rollOutcome(G.p,c):(c.run?c.run():[]))||[]};
+}
+/* v3.8 — 직전 선택을 그대로 반복한다. 없으면 첫 항목으로 떨어진다. */
+function autoRepeat(){
+  const gs=G.ui&&G.ui.groups; if(!gs)return;
+  G.autoBusy=1;
+  for(const g of gs){
+    if(!g.choices.length)continue;
+    const want=G.repeat&&G.repeat['g'+g.key];
+    let i=want?g.choices.findIndex(c=>c.id===want.act):-1;
+    if(i<0)i=0;
+    pickAct(g.key,i);
+    let guard=0;
+    while(G.picking&&G.ui&&G.ui.choices&&guard++<10){
+      let j=want?G.ui.choices.findIndex(c=>c.t===want.leaf):-1;
+      if(j<0)j=G.ui.choices.findIndex(c=>c.t!=='돌아간다');
+      if(j<0){G.picking=0;G.pickPrefix='';actionMenu();break;}
+      choose(j);
+    }
+  }
+  G.autoBusy=0;
+  if(G.pick&&(G.pick.g1||G.pick.g2))runPicks();
+  else advance();
 }
 /* 확정 — 그룹1 · 그룹2 를 순서대로 실행하고 결과를 한 화면에 모은다 */
 function runPicks(){
@@ -843,6 +879,8 @@ function runPicks(){
   let log=[];
   picks.forEach(pk=>{ log=log.concat(pk.exec()||[]); });
   logChoice(p,G.ui.title,picks.map(x=>x.label).join(' + '),p.flags.length>fb);
+  G.repeat={g1:G.pick.g1?{act:G.pick.g1.act,leaf:G.pick.g1.leaf}:null,
+            g2:G.pick.g2?{act:G.pick.g2.act,leaf:G.pick.g2.leaf}:null};
   G.pick={g1:null,g2:null};
   if(p.retired)return;
   scene({when:G.ui.when,title:G.ui.title,body:'',log:log.length?log:['…'],
@@ -1149,6 +1187,7 @@ function viewEnding(){
       <span class="sm dim">최종 등급</span><br><b>${GRADE_LABEL[g]||'선수'}</b></span></div>
     <div class="verdict" style="margin-top:14px">${esc(e.title)}</div>
     <div class="quote">${esc(e.quote).replace(/\n/g,'<br>')}</div>
+    ${e.memory?`<div class="memory">${esc(e.memory)}</div>`:''}
     <div class="sm dim" style="margin-top:12px">${esc(p.retireLine||'')}</div>
     <div class="quote" style="font-size:14px;margin-top:8px">${esc(rvLine)}</div>
     ${hl.length?`<div class="rule"></div><div class="sm dim" style="margin-bottom:8px">이번 생의 기록</div>

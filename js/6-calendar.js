@@ -8,12 +8,14 @@
    [40] STATE — 전역 상태 (구 [13])
    ========================================================================== */
 const G={screen:'title',p:null,ui:null,hof:[],tab:'main',hasSave:false,tq:[],
-         pick:{g1:null,g2:null},picking:0,pickPrefix:'',
+         pick:{g1:null,g2:null},picking:0,pickPrefix:'',pickParent:'',
+         auto:0,autoSeason:0,autoBusy:0,repeat:null,
          cal:{year:2026,month:0,week:0,queue:[],last:null}};
 const app=()=>document.getElementById('app');
 
 function scene(o){
   G.ui=o;render();save();
+  if(typeof autoTick==='function')autoTick();      // v3.8 — 자동 진행
   /* 모바일에서 스크롤이 아래에 남아 있으면 새 장면의 첫 줄을 놓친다 */
   try{
     if(window.innerWidth<=940){
@@ -89,6 +91,49 @@ function buildMonth(m){
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   v3.8 — 자동 진행 (요구: 게임이 루즈하다)
+   실측: 커리어 1,365화면 중 66%가 선택 없이 "계속"만 누르는 화면이었다.
+     · G.auto        결과·경기 화면을 자동으로 넘긴다. hold:1 인 장면에서는 멈춘다.
+     · G.autoSeason  시즌이 끝날 때까지 직전에 고른 행동을 반복한다.
+   둘 다 선택지가 나오거나 중요한 장면(hold)이 오면 스스로 풀린다.
+   ══════════════════════════════════════════════════════════════════════════ */
+const AUTO_DELAY=140, AUTO_ACT_DELAY=900;
+let _autoTimer=null;
+function autoTick(){
+  if(_autoTimer){clearTimeout(_autoTimer);_autoTimer=null;}
+  if(G.screen!=='game'||!G.p||G.p.retired)return;
+  /* autoRepeat 가 하위 메뉴(훈련 종목·관계 상대)를 거쳐 가는 중에는 건드리지 않는다.
+     이걸 빼면 그 중간 화면을 "선택이 필요한 화면"으로 보고 자동이 매 턴 꺼진다. */
+  if(G.autoBusy)return;
+  const u=G.ui||{};
+  /* 중요한 장면은 자동이라도 멈춰서 보게 한다 */
+  /* 중요한 장면과 선택 화면에서는 멈추되 자동을 끄지는 않는다 —
+     플레이어가 처리하고 나면 이어서 흘러간다. 끄는 건 '멈추기'를 눌렀을 때뿐이다. */
+  if(u.hold)return;
+  if(u.choices&&u.choices.length)return;
+  if(u.groups){
+    if(!G.autoSeason)return;
+    if(G.cal.year>G.autoSeason.y||(G.cal.year===G.autoSeason.y&&G.cal.month>G.autoSeason.m)){G.autoSeason=0;render();return;}
+    /* 행동 화면은 조금 길게 — 여기서 멈추고 싶을 때 손이 들어갈 틈을 준다 */
+    _autoTimer=setTimeout(()=>{ if(G.ui&&G.ui.groups&&G.autoSeason)autoRepeat(); },AUTO_ACT_DELAY);
+    return;
+  }
+  if(!G.auto&&!G.autoSeason)return;
+  _autoTimer=setTimeout(()=>{ if(G.screen==='game')advance(); },AUTO_DELAY);
+}
+function toggleAuto(){
+  G.auto=G.auto?0:1;
+  try{Store.set('auto_v1',G.auto);}catch(e){}
+  render();autoTick();
+}
+function startAutoSeason(){
+  /* 이번 시즌(12월)까지 직전 행동을 반복한다 */
+  G.autoSeason={y:G.cal.year,m:12};
+  render();autoTick();
+}
+function stopAuto(){ G.autoSeason=0; if(_autoTimer){clearTimeout(_autoTimer);_autoTimer=null;} render(); }
+
 function advance(){
   const c=G.cal;
   if(G.ui&&G.ui.after){G.ui.after=0;c.queue.unshift(c.last);}   // 결과 화면 → 같은 페이즈 재진입
@@ -101,6 +146,7 @@ function advance(){
   }
   c.last=c.queue.shift();
   if(runPhase(c.last)==='skip')return advance();
+  autoTick();
 }
 
 /* 현재 시점 라벨 — 모든 씬이 이걸 쓴다 */
@@ -171,7 +217,9 @@ function runPhase(ph){
     const pre=gameSnap(p);                             // 도트 판정용 (홈런·무실점)
     const log=simHalf(p,label,p.clutchBonus*.2,unit,{m:[m.m]});
     p.monthLog=(p.monthLog||[]).concat(log).slice(-6);
-    return scene({when:nowLabel(),dot:gameDot(p,pre),title:'경기',body:'',log,
+    /* 부상이 난 달은 자동 진행이라도 멈춰서 보게 한다 */
+    const hurt=log.some(l=>/부상|이탈|병원|엑스레이|들것/.test(String(l)));
+    return scene({hold:hurt?1:0,when:nowLabel(),dot:gameDot(p,pre),title:'경기',body:'',log,
       diff:statDiff(p,before),cta:'계속'});
   }
 
@@ -232,7 +280,7 @@ function runPhase(ph){
     if(p.farm&&p.farm.g){p.season.farm={g:p.farm.g,h:p.farm.h,ab:p.farm.ab,hr:p.farm.hr,
       rbi:p.farm.rbi,ip:p.farm.ip,w:p.farm.w,er:p.farm.er,k:p.farm.k};}
     p.career.seasons.push(JSON.parse(JSON.stringify(p.season)));
-    return scene({when:nowLabel(),dot:got.includes('정규시즌 MVP')?'awardMvp':got.includes('신인왕')?'awardRookie':
+    return scene({hold:1,when:nowLabel(),dot:got.includes('정규시즌 MVP')?'awardMvp':got.includes('신인왕')?'awardRookie':
         got.includes('골든글러브')?'awardGlove':got.length?'awardTitle':'seasonEnd',
       title:`${p.year} 시즌 결산`,html:seasonSummaryHtml(p,got,agl),cta:'계속'});
   }
@@ -242,11 +290,11 @@ function runPhase(ph){
     if(!G.tq.length)return 'skip';
     const ev=G.tq.shift();
     if(ev.type==='evolve')
-      return scene({when:'특성 진화',html:traitRevealHtml(TR(ev.to),ev.from),cta:'계속',after:1});
+      return scene({hold:1,when:'특성 진화',html:traitRevealHtml(TR(ev.to),ev.from),cta:'계속',after:1});
     const t=TR(ev.id);
     if(p.traits.length<6){
       addTrait(p,ev.id);
-      return scene({when:'새로운 특성',html:traitRevealHtml(t),cta:'계속',after:1});
+      return scene({hold:1,when:'새로운 특성',html:traitRevealHtml(t),cta:'계속',after:1});
     }
     return scene({when:'새로운 특성',title:'특성 슬롯이 가득 찼다',
       body:`<em>[${t.id}]</em>  (${t.grade})\n${t.desc}\n\n어떤 특성을 대신 내보낼까?`,
@@ -258,7 +306,7 @@ function runPhase(ph){
   case 'nat':{
     const r=natCall(p);
     if(!r)return 'skip';
-    return scene({when:'국가대표',dot:'awardTitle',title:'태극마크',body:'',log:[r],cta:'계속'});
+    return scene({hold:1,when:'국가대표',dot:'awardTitle',title:'태극마크',body:'',log:[r],cta:'계속'});
   }
   case 'fa':return faPhase();
   /* ── 신규: 재계약 / 연간 정산 (요구 20·21) ── */
@@ -500,6 +548,40 @@ const ACTIONS={
       return[`손에 맞는 ${W(p).gear}는 생각보다 큰 차이를 만든다.`];}},
 
   /* ══════════════════════════════════════════════════════════════
+     v3.8 — 그룹2 회복 3종 (요구: 피로 관리를 더 러프하고 다양하게)
+     그룹1의 '휴식'은 그 주의 본업을 통째로 버리는 선택이다.
+     여기 셋은 본업을 하면서 몸을 덜어내는 쪽 — 대신 공짜는 하나도 없다.
+     ══════════════════════════════════════════════════════════════ */
+  nap:{icon:'😴',name:'푹 잔다',
+    gain:()=>`피로 ${ASD(-9)} · 컨디션 ↑`,
+    cost:()=>`성장 없음 · 감독 ${ASD(-1)}`,
+    run:p=>{
+      const log=scaledRun(q=>{
+        q.fatigue=clamp(q.fatigue-9,0,100);rel(q,'manager',-1);
+        return[];},p);
+      updateCond(p);
+      return log.concat(['알람을 껐다. 눈을 떴을 때 해가 높았다.']);}},
+
+  spa:{icon:'♨️',name:'사우나와 마사지',
+    gain:()=>`피로 ${ASD(-16)} · 스트레스 ${ASD(-6)}`,cost:'300만원',
+    run:p=>{
+      if(!spend(p,300,'사우나'))return['잔고가 부족하다.'];
+      const log=scaledRun(q=>{
+        q.fatigue=clamp(q.fatigue-16,0,100);q.stress=clamp((q.stress||20)-6,0,100);
+        return[];},p);
+      updateCond(p);
+      return log.concat(['뜨거운 물에 몸을 담그자 어깨가 내려앉았다.']);}},
+
+  physio:{icon:'🩹',name:'물리치료를 받는다',
+    gain:()=>`피로 ${ASD(-12)} · 이번 시즌 부상 위험 ↓`,cost:'700만원 · 성장 없음',
+    run:p=>{
+      if(!spend(p,700,'물리치료'))return['잔고가 부족하다.'];
+      const log=scaledRun(q=>{ q.fatigue=clamp(q.fatigue-12,0,100); return[];},p);
+      p.injRisk=(p.injRisk||0)-.06;
+      updateCond(p);
+      return log.concat(['치료사가 뭉친 자리를 정확히 짚었다. "여기, 계속 쓰셨네요."']);}},
+
+  /* ══════════════════════════════════════════════════════════════
      v3.4 — 커리어 단계별 행동 (요구: 180개월 내내 같은 메뉴를 보지 않게)
      신인기 · 주전기 · 베테랑기가 각각 자기 시기에만 할 수 있는 것을 갖는다.
      careerStage(p) 가 단계를 정하고 monthActions 가 여기서 골라 붙인다.
@@ -723,6 +805,10 @@ function monthActions(p){
   if(!m.season&&(p.fanRating||0)>=55&&p.adYear!==p.year)list.push('adShoot');
 
   list.push('rest','hobby','relation');
+  /* v3.8 — 회복은 몸 상태와 지갑이 허락할 때만 뜬다 */
+  list.push('nap');
+  if(p.money.balance>=300&&p.fatigue>=25)list.push('spa');
+  if(p.money.balance>=700&&(p.fatigue>=40||p.injuries.length))list.push('physio');
   if(!m.season&&!p.money.trainer&&p.money.balance>=1800)list.push('trainer');
   if(!m.season&&p.money.balance>=1200&&!p.gearYear)list.push('gear');
   return list;
@@ -738,6 +824,7 @@ const ACT_GROUP={
   teamTrain:1, soloTrain:1, focus:1, rest:1, push:1, rehab:1,
   slumpHard:1, slumpRest:1, chase:1, eyeCatch:1,
   hobby:2, relation:2, slumpCoach:2, trainer:2, gear:2,
+  nap:2, spa:2, physio:2,
   mentor:2, bodyCare:2, coachStudy:2, adShoot:2
 };
 function actChoice(id){
@@ -817,7 +904,7 @@ function rosterScene(opening){
     flagAt(p,'firstCallUp');
     p.timeline.push({y:G.cal.year,m:G.cal.month,t:'프로 1군 데뷔'});
     p.stress=clamp((p.stress||20)+8,0,100);
-    return scene({when:nowLabel(),lvWas:before,dot:'callUp',title:'전화가 왔다',
+    return scene({hold:1,when:nowLabel(),lvWas:before,dot:'callUp',title:'전화가 왔다',
       body:`"내일 1군에 합류해."\n\n잠시 말이 나오지 않았다.\n\n${p.age}살의 ${MON().mood}.\n당신은 처음으로 프로야구 1군 선수 명단에 이름을 올렸다.`,
       log:[`${G.cal.year}.${String(G.cal.month).padStart(2,'0')} · 1군 등록 (${now})`]
         .concat(farmLine?[farmLine]:[]),
@@ -825,7 +912,7 @@ function rosterScene(opening){
   }
   if(before==='2군'&&now!=='2군'){
     rel(p,'manager',3);
-    return scene({when:nowLabel(),lvWas:before,dot:'callUp',title:'콜업',
+    return scene({hold:1,when:nowLabel(),lvWas:before,dot:'callUp',title:'콜업',
       body:`다시 1군의 부름을 받았다.\n\n이번엔 자리를 지킬 수 있을까.`,
       log:[`보직 · ${now}`].concat(farmLine?[farmLine]:[]),cta:'계속'});
   }
@@ -834,7 +921,7 @@ function rosterScene(opening){
     p.stress=clamp((p.stress||20)+12,0,100);
     tend(p,{patience:2});
     flagAt(p,'demoted');
-    return scene({when:nowLabel(),lvWas:before,dot:'demote',title:'강등',
+    return scene({hold:1,when:nowLabel(),lvWas:before,dot:'demote',title:'강등',
       body:`감독실에서 짧은 이야기를 들었다.\n\n"내려가서 다시 만들어 와."`,
       log:['2군으로 내려간다.'].concat(depth?[depth]:[]),cta:'계속'});
   }

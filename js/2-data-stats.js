@@ -77,7 +77,7 @@ const CUL=id=>CULTURE[id]||CULTURE.seoul;
 const T=(id,grade,pos,desc,eff,extra={})=>({id,grade,pos,desc,eff,...extra});
 const TRAITS=[
 /* ── 공통 ── */
-T('노력파','일반','all','훈련 효과 +8%',{train:.08},{prob:(p)=>p.tend.diligence>=74?.3:0, evolve:{to:'연습벌레',cond:p=>p.tend.diligence>=86&&p.trainCount>=26}}),
+T('노력파','일반','all','훈련 효과 +8%',{train:.08},{prob:(p)=>p.tend.diligence>=80?.26:0, evolve:{to:'연습벌레',cond:p=>p.tend.diligence>=93&&p.trainCount>=80}}),
 T('연습벌레','희귀','all','훈련 효과 +16%, 체력 소모 증가',{train:.16,staminaCost:.2}),
 T('천재','영웅','all','잠재력 활용 효율 +25%, 일반 훈련 효과는 낮다',{potential:.25,train:-.05},{prob:p=>p.pot>=88&&p.age<=22?.3:0, evolve:{to:'야구천재',cond:p=>p.pot>=92&&ovr(p)>=85}}),
 T('야구천재','전설','all','성장 한계를 스스로 밀어낸다',{potential:.4,train:.05}),
@@ -95,7 +95,7 @@ T('자기관리','희귀','all','노쇠화 속도 -30%',{aging:-.3},{prob:p=>p.t
 T('게으름','일반','all','훈련 효과 -15%, 휴식 효과 +40%',{train:-.15,rest:.4},{neg:1,prob:p=>p.tend.diligence<=35?.35:0}),
 T('팀플레이어','일반','all','팀 관계 상승, 리더십 성장',{teamB:1},{prob:p=>p.tend.loyalty>=70&&p.tend.selfish<=40?.4:0, evolve:{to:'주장감',cond:p=>p.tend.leadership>=78&&p.age>=27}}),
 T('독고다이','희귀','all','개인 기록에 강하지만 팀 관계가 어렵다',{teamB:-2,clutch:3},{neg:1,prob:p=>p.tend.selfish>=72?.4:0}),
-T('주장감','영웅','all','팀 전체의 성적을 끌어올린다',{teamB:3,lead:6},{prob:p=>p.tend.leadership>=80&&p.age>=27?.45:0, evolve:{to:'카리스마',cond:p=>p.flags.includes('captain')&&p.awards.champ>=1}}),
+T('주장감','영웅','all','팀 전체의 성적을 끌어올린다',{teamB:3,lead:6},{prob:p=>p.tend.leadership>=86&&p.age>=27?.34:0, evolve:{to:'카리스마',cond:p=>p.flags.includes('captain')&&p.awards.champ>=1}}),
 T('카리스마','전설','all','라커룸의 중심',{teamB:5,lead:10}),
 T('인기인','일반','all','팬 평가 상승',{fan:1},{prob:p=>p.tend.star>=70?.15:0, evolve:{to:'슈퍼스타',cond:p=>p.tend.star>=85&&p.awards.allstar>=4}}),
 T('슈퍼스타','영웅','all','경기장 밖에서도 시선이 따라다닌다',{fan:3,clutch:3},{evolve:{to:'국민스타',cond:p=>p.nat.caps>=2&&p.awards.mvp>=1}}),
